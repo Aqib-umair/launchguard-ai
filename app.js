@@ -501,6 +501,7 @@ const views = {
         </div>
       </div>
     `;
+    body += components.wfNav('share');
     app.innerHTML = components.shareShell('Public Report', body);
     bindEvents();
   }
