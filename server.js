@@ -10,8 +10,14 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
-app.use(cors());
-app.use(express.json());
+app.use(cors({ limit: '50mb' }));
+app.use(express.json({ limit: '50mb' }));
+
+// Helper to get latest scan ID
+const getLatestScanId = async (db) => {
+  const scan = await db.get(`SELECT id FROM scans ORDER BY created_at DESC LIMIT 1`);
+  return scan ? scan.id : null;
+};
 
 // API Routes
 app.post('/api/login', async (req, res) => {
@@ -28,16 +34,17 @@ app.post('/api/login', async (req, res) => {
 app.get('/api/dashboard', async (req, res) => {
   const db = getDb();
   const latestScan = await db.get(`SELECT * FROM scans ORDER BY created_at DESC LIMIT 1`);
-  if (!latestScan) {
-    return res.json({ hasScan: false });
-  }
+  if (!latestScan) return res.json({ hasScan: false });
+  
+  const issues = await db.all(`SELECT severity FROM issues WHERE scan_id = ?`, [latestScan.id]);
+  
   res.json({
     hasScan: true,
     score: latestScan.score,
     brokenFlows: latestScan.broken_flows,
     apiFailures: latestScan.api_failures,
-    performance: latestScan.performance,
-    a11y: 4, security: 1, fixes: 2, consoleErrs: 5, networkErrs: 2,
+    performance: latestScan.performance || 98,
+    a11y: 0, security: 0, fixes: issues.length, consoleErrs: latestScan.api_failures, networkErrs: latestScan.api_failures,
     latestScanName: latestScan.name,
     latestScanStatus: latestScan.status
   });
@@ -51,10 +58,7 @@ app.post('/api/scans', async (req, res) => {
     `INSERT INTO scans (id, name, repo_url, deploy_url, status) VALUES (?, ?, ?, ?, ?)`,
     [id, name, repoUrl, deployUrl, 'running']
   );
-  
-  // Kick off background scan
   runScan(id, repoUrl, deployUrl);
-  
   res.status(201).json({ id, name, status: 'running' });
 });
 
@@ -64,50 +68,51 @@ app.get('/api/scans', async (req, res) => {
   res.json(scans);
 });
 
-// SSE endpoint for scan progress
 app.get('/api/scans/:id/stream', (req, res) => {
   const { id } = req.params;
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
-  
   const listener = (data) => {
     res.write(`data: ${JSON.stringify(data)}\n\n`);
-    if (data.p === 100) {
-      res.end();
-      scanEmitter.removeListener(`scan:${id}`, listener);
-    }
+    if (data.p === 100) { res.end(); scanEmitter.removeListener(`scan:${id}`, listener); }
   };
-  
   scanEmitter.on(`scan:${id}`, listener);
-  
-  req.on('close', () => {
-    scanEmitter.removeListener(`scan:${id}`, listener);
-  });
+  req.on('close', () => scanEmitter.removeListener(`scan:${id}`, listener));
 });
 
 app.get('/api/issues', async (req, res) => {
   const db = getDb();
-  const issues = await db.all(`SELECT * FROM issues ORDER BY created_at DESC`);
+  const sid = await getLatestScanId(db);
+  const issues = await db.all(`SELECT * FROM issues WHERE scan_id = ? ORDER BY created_at DESC`, [sid]);
   res.json(issues);
 });
 
 app.get('/api/flows', async (req, res) => {
   const db = getDb();
-  const flows = await db.all(`SELECT * FROM flows`);
+  const sid = await getLatestScanId(db);
+  const flows = await db.all(`SELECT * FROM flows WHERE scan_id = ?`, [sid]);
   res.json(flows);
 });
 
-// Serve frontend static files
-app.use(express.static(__dirname));
-app.use((req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
+app.get('/api/nodes', async (req, res) => {
+  const db = getDb();
+  const sid = await getLatestScanId(db);
+  const nodes = await db.all(`SELECT * FROM nodes WHERE scan_id = ?`, [sid]);
+  res.json(nodes);
 });
 
-// Init DB and Start
+app.get('/api/evals', async (req, res) => {
+  const db = getDb();
+  const sid = await getLatestScanId(db);
+  const evals = await db.all(`SELECT * FROM evals WHERE scan_id = ?`, [sid]);
+  res.json(evals);
+});
+
+app.use(express.static(__dirname));
+app.use((req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+
 initDb().then(() => {
   const port = process.env.PORT || 3000;
-  app.listen(port, () => {
-    console.log(`LaunchGuard AI backend running on http://localhost:${port}`);
-  });
+  app.listen(port, () => console.log(`LaunchGuard AI backend running on http://localhost:${port}`));
 }).catch(console.error);

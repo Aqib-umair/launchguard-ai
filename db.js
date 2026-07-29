@@ -43,6 +43,15 @@ export async function initDb() {
       area TEXT,
       root_cause TEXT,
       patch TEXT,
+      affected_url TEXT,
+      affected_component TEXT,
+      before_code TEXT,
+      after_code TEXT,
+      screenshot TEXT,
+      console_error TEXT,
+      network_error TEXT,
+      stack_trace TEXT,
+      confidence INTEGER,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -52,7 +61,32 @@ export async function initDb() {
       name TEXT,
       score INTEGER,
       fail_step TEXT,
-      duration TEXT
+      duration TEXT,
+      screenshot TEXT,
+      console_error TEXT,
+      network_error TEXT,
+      dom_snapshot TEXT,
+      severity TEXT,
+      confidence INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS nodes (
+      id TEXT PRIMARY KEY,
+      scan_id TEXT,
+      path TEXT,
+      status TEXT,
+      screenshot TEXT,
+      errors TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS evals (
+      id TEXT PRIMARY KEY,
+      scan_id TEXT,
+      name TEXT,
+      target_url TEXT,
+      prompt TEXT,
+      status TEXT,
+      reasoning TEXT
     );
   `);
 

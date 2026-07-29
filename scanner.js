@@ -14,13 +14,7 @@ export async function runScan(scanId, repoUrl, deployUrl) {
   try {
     emit("→ Booting Playwright Chromium engine...", 5);
     const browser = await chromium.launch({ headless: true });
-    
-    emit("✓ Browser launched. Creating incognito context.", 15);
-    const context = await browser.newContext({
-      viewport: { width: 1280, height: 720 },
-      userAgent: 'LaunchGuard-AI-Agent/1.0'
-    });
-    
+    const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, userAgent: 'LaunchGuard-AI-Agent/1.0' });
     const page = await context.newPage();
     
     const consoleLogs = [];
@@ -28,65 +22,123 @@ export async function runScan(scanId, repoUrl, deployUrl) {
     
     page.on('console', msg => {
       consoleLogs.push({ type: msg.type(), text: msg.text() });
-      if (msg.type() === 'error') {
-        emit(`! Browser Console Error: ${msg.text().substring(0, 50)}...`, 50, true);
-      }
+      if (msg.type() === 'error') emit(`! Browser Console Error: ${msg.text().substring(0, 50)}...`, 50, true);
     });
     
     page.on('response', response => {
       const status = response.status();
       const url = response.url();
       networkRequests.push({ url, status });
-      if (status >= 400 && status < 600) {
-        emit(`! Network Error: ${status} on ${url.substring(0, 40)}`, 50, true);
-      }
+      if (status >= 400 && status < 600) emit(`! Network Error: ${status} on ${url.substring(0, 40)}`, 50, true);
     });
     
-    emit(`→ Navigating to deployment: ${deployUrl}`, 25);
+    emit(`→ Navigating to root deployment: ${deployUrl}`, 10);
+    
+    const nodes = [];
+    const visited = new Set();
+    
+    // Function to capture node state
+    const captureNode = async (currentUrl, pathName) => {
+      emit(`→ Analyzing path: ${pathName}`, 20 + (nodes.length * 10));
+      await page.waitForTimeout(1000);
+      const buffer = await page.screenshot({ type: 'jpeg', quality: 50 });
+      const b64 = `data:image/jpeg;base64,${buffer.toString('base64')}`;
+      
+      const nodeErrors = consoleLogs.filter(l => l.type === 'error').length + networkRequests.filter(r => r.status >= 400).length;
+      
+      nodes.push({
+        id: `NODE-${randomUUID().split('-')[0]}`,
+        scan_id: scanId,
+        path: pathName,
+        status: nodeErrors > 0 ? 'red' : 'green',
+        screenshot: b64,
+        errors: nodeErrors
+      });
+    };
+
+    // 1. Visit Home
     try {
       await page.goto(deployUrl, { waitUntil: 'networkidle', timeout: 15000 });
-      emit("✓ Page loaded successfully (network idle).", 45);
-    } catch (e) {
-      emit(`! Navigation timeout or error: ${e.message}`, 45, true);
+      visited.add(deployUrl);
+      await captureNode(deployUrl, '/');
+    } catch(e) {
+      emit(`! Root navigation timeout`, 25, true);
     }
     
-    emit("→ Injecting evaluation scripts to check DOM...", 60);
-    // Simulate some smart scrolling / interactions
-    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-    await page.waitForTimeout(1000);
+    // 2. Extract Links
+    emit("→ Extracting interaction surface...", 40);
+    let hrefs = await page.evaluate(() => {
+      return Array.from(document.querySelectorAll('a'))
+        .map(a => a.href)
+        .filter(h => h.startsWith(window.location.origin) && !h.includes('#'));
+    });
     
-    // Attempt to find any buttons and click a random safe one just to get events
-    emit("→ Exploring interactive elements...", 75);
-    const buttons = await page.$$('button, a');
-    if (buttons.length > 0) {
-      emit(`✓ Found ${buttons.length} interactive elements.`, 80);
-    } else {
-      emit(`! No interactive elements found.`, 80, true);
+    hrefs = [...new Set(hrefs)].filter(h => !visited.has(h)).slice(0, 2); // Visit max 2 internal links
+    
+    // 3. Visit internal links
+    for (const link of hrefs) {
+      try {
+        emit(`→ Navigating to internal route: ${link}`, 50);
+        await page.goto(link, { waitUntil: 'networkidle', timeout: 10000 });
+        visited.add(link);
+        const pathName = new URL(link).pathname || link;
+        await captureNode(link, pathName);
+      } catch(e) {
+        emit(`! Failed to reach internal route`, 60, true);
+      }
     }
     
-    emit("→ Analyzing captured data with AI...", 90);
-    const aiIssue = await analyzeScanData(scanId, deployUrl, consoleLogs, networkRequests);
+    emit("→ Finalizing Application Shader mapping...", 75);
     
-    if (aiIssue) {
+    // Save nodes to DB
+    for (const node of nodes) {
       await db.run(
-        `INSERT INTO issues (id, scan_id, title, status, severity, area, root_cause, patch) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [aiIssue.id, aiIssue.scan_id, aiIssue.title, aiIssue.status, aiIssue.severity, aiIssue.area, aiIssue.root_cause, aiIssue.patch]
+        `INSERT INTO nodes (id, scan_id, path, status, screenshot, errors) VALUES (?, ?, ?, ?, ?, ?)`,
+        [node.id, node.scan_id, node.path, node.status, node.screenshot, node.errors]
       );
-      emit(`! AI identified regression: ${aiIssue.title}`, 95, true);
-      
-      // Generate a broken flow as well
-      await db.run(
-        `INSERT INTO flows (id, scan_id, name, score, fail_step, duration) VALUES (?, ?, ?, ?, ?, ?)`,
-        [`FLOW-${randomUUID().split('-')[0].toUpperCase()}`, scanId, 'Automated Crawl Path', 65, 'Page Interaction', '14.2s']
-      );
-    } else {
-      emit("✓ AI analysis complete. No critical regressions found.", 95);
+    }
+
+    // Capture final DOM for AI
+    const finalDom = await page.content();
+    const finalScreenshot = nodes.length > 0 ? nodes[0].screenshot : ''; // Use root screenshot
+    
+    emit("→ Pumping data into AI analysis agent...", 85);
+    
+    // Let AI generate Issues, Flows, and Evals from this deep context
+    const aiData = await analyzeScanData(scanId, deployUrl, consoleLogs, networkRequests, nodes, finalDom);
+    
+    // Insert AI results
+    if (aiData && aiData.issues) {
+      for (const iss of aiData.issues) {
+        await db.run(
+          `INSERT INTO issues (id, scan_id, title, status, severity, area, root_cause, patch, affected_url, affected_component, before_code, after_code, screenshot, console_error, network_error, stack_trace, confidence) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [iss.id, scanId, iss.title, iss.status, iss.severity, iss.area, iss.root_cause, iss.patch, iss.affected_url, iss.affected_component, iss.before_code, iss.after_code, finalScreenshot, iss.console_error, iss.network_error, iss.stack_trace, iss.confidence]
+        );
+      }
+    }
+    
+    if (aiData && aiData.flows) {
+      for (const flow of aiData.flows) {
+        await db.run(
+          `INSERT INTO flows (id, scan_id, name, score, fail_step, duration, screenshot, console_error, network_error, dom_snapshot, severity, confidence) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [flow.id, scanId, flow.name, flow.score, flow.fail_step, flow.duration, finalScreenshot, flow.console_error, flow.network_error, flow.dom_snapshot, flow.severity, flow.confidence]
+        );
+      }
+    }
+    
+    if (aiData && aiData.evals) {
+      for (const ev of aiData.evals) {
+        await db.run(
+          `INSERT INTO evals (id, scan_id, name, target_url, prompt, status, reasoning) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [ev.id, scanId, ev.name, ev.target_url, ev.prompt, ev.status, ev.reasoning]
+        );
+      }
     }
     
     await browser.close();
     
-    const finalScore = aiIssue ? 78 : 96;
-    const brokenFlows = aiIssue ? 1 : 0;
+    const finalScore = aiData?.issues?.length > 0 ? 68 : 94;
+    const brokenFlows = aiData?.flows?.length || 0;
     const apiFails = networkRequests.filter(r => r.status >= 400).length;
     
     await db.run(
@@ -94,7 +146,7 @@ export async function runScan(scanId, repoUrl, deployUrl) {
       [finalScore, brokenFlows, apiFails, scanId]
     );
     
-    emit("✓ Scan complete.", 100);
+    emit("✓ AI Analysis complete. Report generated.", 100);
     
   } catch (error) {
     console.error("Scan Error:", error);
