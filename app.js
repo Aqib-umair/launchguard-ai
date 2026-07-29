@@ -106,10 +106,12 @@ const actions = {
     const form = e.target;
     const name = form.name.value.trim();
     const email = form.email.value.trim();
+    const username = form.username ? form.username.value.trim() : null;
     
     if (!name || !email) return alert("Required fields missing.");
-    const res = await api.post('/api/login', { name, email });
-    currentUser = res.user;
+    
+    // Pure frontend mock authentication as requested
+    currentUser = { id: Date.now(), name, email, username };
     store.setJSON('user', currentUser);
     location.hash = 'report';
   },
@@ -131,6 +133,7 @@ const actions = {
     
     const res = await api.post('/api/scans', { name, repoUrl, deployUrl });
     store.set('activeScanId', res.id);
+    store.set('hasScanned', 'true');
     location.hash = 'progress';
   },
   applyPatch: (issueId, patchContent) => {
@@ -149,68 +152,185 @@ window.actions = actions;
 // Views
 const views = {
   landing: () => {
-    app.innerHTML = `<div class="app"><main class="main">
-      <header class="topbar" style="padding: 0 60px;">
-        <div class="brand"><div class="mark">L</div><span>launchguard<small>AI RELIABILITY</small></span></div>
-        <div class="top-actions">
-          <span>Docs</span><span>Changelog</span>
-          ${components.btn('Open dashboard','login','ghost')} 
-          ${components.btn('Get started','login','primary')}
-        </div>
-      </header>
-      <section class="hero transition-fade-in">
-        <div class="hero-copy">
-          <div class="eyebrow">Autonomous quality infrastructure</div>
-          <h1>Ship with <em>confidence.</em><br>Learn from every flow.</h1>
-          <p>LaunchGuard watches your product like a real user, catches the moments that break, and turns them into fixes your team can ship.</p>
-          <div class="hero-actions">
-            ${components.btn('Run your first scan →','login','primary')} 
+    app.innerHTML = `<div class="app"><main class="main" style="border-left:0; background: #000; color: #fff;">
+      <style>
+        .premium-landing { font-family: 'Inter', sans-serif; overflow-x: hidden; }
+        .p-topbar { display: flex; justify-content: space-between; align-items: center; padding: 20px 60px; position: fixed; top: 0; left: 0; right: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(12px); z-index: 1000; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .p-hero { padding: 180px 20px 100px; text-align: center; max-width: 1000px; margin: 0 auto; }
+        .p-hero h1 { font-size: 72px; letter-spacing: -3px; line-height: 1.1; margin-bottom: 24px; font-weight: 600; background: linear-gradient(to bottom right, #fff, #888); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .p-hero p { font-size: 20px; color: #a0a0a0; max-width: 700px; margin: 0 auto 40px; line-height: 1.6; }
+        .p-hero .actions { display: flex; gap: 16px; justify-content: center; }
+        
+        .p-section { padding: 120px 20px; max-width: 1200px; margin: 0 auto; border-top: 1px solid rgba(255,255,255,0.05); }
+        .p-section-title { font-size: 40px; letter-spacing: -1.5px; margin-bottom: 60px; text-align: center; }
+        
+        .vs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+        .vs-col { padding: 40px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05); background: rgba(255,255,255,0.02); }
+        .vs-col h3 { font-size: 24px; margin-bottom: 32px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 16px; }
+        .vs-item { display: flex; align-items: center; margin-bottom: 20px; font-size: 16px; color: #a0a0a0; }
+        .vs-item.red i { color: #ff4d4d; background: rgba(255,77,77,0.1); }
+        .vs-item.green i { color: #00ff88; background: rgba(0,255,136,0.1); }
+        .vs-item i { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; margin-right: 16px; font-style: normal; font-weight: bold; }
+        
+        .workflow-timeline { max-width: 600px; margin: 0 auto; position: relative; }
+        .workflow-timeline::before { content: ''; position: absolute; left: 24px; top: 0; bottom: 0; width: 2px; background: linear-gradient(to bottom, #333, #111); }
+        .step { display: flex; align-items: center; margin-bottom: 40px; position: relative; opacity: 0; transform: translateY(20px); animation: fadeUp 0.8s forwards; }
+        .step:nth-child(1) { animation-delay: 0.1s; } .step:nth-child(2) { animation-delay: 0.3s; } .step:nth-child(3) { animation-delay: 0.5s; } .step:nth-child(4) { animation-delay: 0.7s; } .step:nth-child(5) { animation-delay: 0.9s; } .step:nth-child(6) { animation-delay: 1.1s; } .step:nth-child(7) { animation-delay: 1.3s; } .step:nth-child(8) { animation-delay: 1.5s; }
+        .step-num { width: 50px; height: 50px; background: #000; border: 2px solid #333; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-family: 'DM Mono'; margin-right: 24px; z-index: 2; color: #fff; }
+        .step-content { background: rgba(255,255,255,0.03); padding: 24px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); flex-grow: 1; font-size: 18px; }
+        
+        .feat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+        .feat-card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 32px; border-radius: 12px; transition: transform 0.2s, background 0.2s; }
+        .feat-card:hover { transform: translateY(-5px); background: rgba(255,255,255,0.04); }
+        .feat-card h4 { font-size: 20px; margin-bottom: 12px; }
+        .feat-card p { color: #888; font-size: 15px; line-height: 1.5; }
+        
+        .proof-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px; text-align: center; }
+        .proof-stat { font-size: 64px; font-weight: 700; letter-spacing: -2px; margin-bottom: 8px; background: linear-gradient(to right, #00ff88, #00b8ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        
+        .cta-section { text-align: center; padding: 160px 20px; background: radial-gradient(circle at center, rgba(0,255,136,0.1) 0, #000 50%); }
+        .cta-section h2 { font-size: 56px; letter-spacing: -2px; margin-bottom: 40px; }
+        
+        @keyframes fadeUp { to { opacity: 1; transform: translateY(0); } }
+      </style>
+      <div class="premium-landing">
+        <header class="p-topbar">
+          <div class="brand"><div class="mark" style="background:#fff; color:#000;">L</div><span style="font-weight:600;">launchguard</span></div>
+          <div>
+            <button class="btn ghost" style="color:#fff;" onclick="location.hash='login'">Log in</button>
+            <button class="btn primary" style="background:#fff; color:#000;" onclick="location.hash='register'">Sign up</button>
           </div>
-        </div>
-        <div class="infographic">
-          <div class="info-card solution">
-            <div class="info-label">LaunchGuard Engine</div>
-            <h2 class="info-title">AI Automation</h2>
-            <div class="info-visual">
-              <div>✓ Playwright crawler active</div>
-              <div>✓ Navigating to deployment...</div>
-              <div>✓ Extracting internal links</div>
-              <div class="success">✓ AI generating patch files</div>
+        </header>
+        
+        <section class="p-hero">
+          <h1>Your AI Reliability<br>Engineer</h1>
+          <p>Automatically test your deployed application, discover broken user journeys, analyze failures with AI, and generate fixes before your users find the bugs.</p>
+          <div class="actions">
+            <button class="btn primary" style="background:#fff; color:#000; padding:16px 32px; font-size:16px;" onclick="location.hash='register'">Get Started</button>
+            <button class="btn ghost" style="border:1px solid rgba(255,255,255,0.2); padding:16px 32px; font-size:16px;">Watch Demo</button>
+          </div>
+        </section>
+        
+        <section class="p-section">
+          <h2 class="p-section-title">The old way vs. The LaunchGuard way</h2>
+          <div class="vs-grid">
+            <div class="vs-col">
+              <h3>Traditional QA</h3>
+              <div class="vs-item red"><i>✕</i> Manual testing</div>
+              <div class="vs-item red"><i>✕</i> Missed edge-case bugs</div>
+              <div class="vs-item red"><i>✕</i> Slow debugging cycles</div>
+              <div class="vs-item red"><i>✕</i> Repeated regression testing</div>
+              <div class="vs-item red"><i>✕</i> Difficult collaboration</div>
+            </div>
+            <div class="vs-col" style="border-color: rgba(0,255,136,0.3); background: rgba(0,255,136,0.02);">
+              <h3 style="color:#00ff88; border-color: rgba(0,255,136,0.2);">LaunchGuard AI</h3>
+              <div class="vs-item green"><i>✓</i> Autonomous browser testing</div>
+              <div class="vs-item green"><i>✓</i> AI root cause analysis</div>
+              <div class="vs-item green"><i>✓</i> Broken flow detection</div>
+              <div class="vs-item green"><i>✓</i> AI generated code fixes</div>
+              <div class="vs-item green"><i>✓</i> Instantly shareable reports</div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+        
+        <section class="p-section">
+          <h2 class="p-section-title">How it works</h2>
+          <div class="workflow-timeline">
+            <div class="step"><div class="step-num">1</div><div class="step-content">Paste GitHub Repository</div></div>
+            <div class="step"><div class="step-num">2</div><div class="step-content">Paste Deployment URL</div></div>
+            <div class="step"><div class="step-num">3</div><div class="step-content" style="border-color:#00b8ff; color:#00b8ff;">Playwright explores the application</div></div>
+            <div class="step"><div class="step-num">4</div><div class="step-content">AI analyzes failures</div></div>
+            <div class="step"><div class="step-num">5</div><div class="step-content" style="border-color:#ff4d4d; color:#ff4d4d;">Broken flows detected</div></div>
+            <div class="step"><div class="step-num">6</div><div class="step-content">Issues generated</div></div>
+            <div class="step"><div class="step-num">7</div><div class="step-content" style="border-color:#00ff88; color:#00ff88;">AI Fix Plans generated</div></div>
+            <div class="step"><div class="step-num">8</div><div class="step-content">Share report with your team</div></div>
+          </div>
+        </section>
+        
+        <section class="p-section">
+          <h2 class="p-section-title">Everything you need to ship safely</h2>
+          <div class="feat-grid">
+            <div class="feat-card"><h4>Autonomous Browser Testing</h4><p>LaunchGuard spins up Playwright engines to automatically crawl and test your deployment without writing a single test.</p></div>
+            <div class="feat-card"><h4>Flow Intelligence</h4><p>Visual node mapping of every discovered route, identifying healthy paths and pinpointing exact failure locations.</p></div>
+            <div class="feat-card"><h4>AI Root Cause Analysis</h4><p>When an error happens, AI reads the DOM snapshot, console logs, and network trace to tell you exactly why.</p></div>
+            <div class="feat-card"><h4>Issue Tracker</h4><p>A built-in dashboard prioritizing failures by severity and impact on the user journey.</p></div>
+            <div class="feat-card"><h4>AI Fix Plans</h4><p>Don't just find bugs. Download complete `.patch` files generated by AI to immediately remediate issues.</p></div>
+            <div class="feat-card"><h4>Performance & Accessibility</h4><p>Automatically grade each route's performance and accessibility alongside standard regression checks.</p></div>
+          </div>
+        </section>
+        
+        <section class="p-section">
+          <div class="proof-grid">
+            <div><div class="proof-stat">4.2M+</div><div style="color:#888; font-size:18px;">Interactions analyzed</div></div>
+            <div><div class="proof-stat">850k</div><div style="color:#888; font-size:18px;">Issues detected</div></div>
+            <div><div class="proof-stat">120k</div><div style="color:#888; font-size:18px;">AI fixes deployed</div></div>
+          </div>
+        </section>
+        
+        <section class="cta-section">
+          <h2>Ready to ship with confidence?</h2>
+          <button class="btn primary" style="background:#fff; color:#000; padding:20px 40px; font-size:20px; font-weight:600;" onclick="location.hash='register'">Get Started</button>
+        </section>
+      </div>
     </main></div>`;
   },
   
   auth: (isRegister) => {
-    app.innerHTML = `<div class="app" style="justify-content:center; align-items:flex-start;">
-      <div class="auth-wrap transition-fade-in">
-        <div class="brand" style="justify-content:center; margin-bottom: 32px;">
-          <div class="mark" style="width:36px; height:36px; border-radius:10px; font-size:18px;">L</div>
-          <span style="font-size:24px; letter-spacing:-1px;">launchguard</span>
+    const isLogin = !isRegister;
+    app.innerHTML = `<div class="app" style="justify-content:center; align-items:flex-start; background:#000;">
+      <style>
+        .auth-container { width: 100%; max-width: 440px; margin: 80px auto; color: #fff; font-family: 'Inter', sans-serif; }
+        .auth-brand { text-align: center; margin-bottom: 40px; display: flex; align-items: center; justify-content: center; gap: 12px; }
+        .auth-box { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 40px; }
+        .auth-tabs { display: flex; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 32px; }
+        .auth-tab { flex: 1; text-align: center; padding: 12px; cursor: pointer; color: #888; font-weight: 500; transition: color 0.2s, border-bottom 0.2s; border-bottom: 2px solid transparent; }
+        .auth-tab.active { color: #fff; border-bottom: 2px solid #fff; }
+        .auth-field { margin-bottom: 20px; }
+        .auth-field label { display: block; margin-bottom: 8px; font-size: 13px; color: #a0a0a0; }
+        .auth-field input { width: 100%; background: #000; border: 1px solid rgba(255,255,255,0.1); color: #fff; padding: 12px; border-radius: 6px; font-size: 15px; outline: none; transition: border-color 0.2s; }
+        .auth-field input:focus { border-color: #00ff88; }
+        .auth-submit { width: 100%; background: #fff; color: #000; padding: 14px; border-radius: 6px; font-size: 16px; font-weight: 600; border: none; cursor: pointer; margin-top: 12px; transition: background 0.2s; }
+        .auth-submit:hover { background: #e0e0e0; }
+      </style>
+      <div class="auth-container transition-fade-in">
+        <div class="auth-brand">
+          <div class="mark" style="background:#fff; color:#000; width:32px; height:32px; font-size:16px;">L</div>
+          <span style="font-size:22px; font-weight:600; letter-spacing:-1px;">launchguard</span>
         </div>
-        <div class="auth-card">
-          <h1 style="text-align:center; font-size:24px; margin-bottom:8px;">${isRegister ? 'Create an account' : 'Welcome back'}</h1>
-          <p style="text-align:center; color:var(--muted); margin-bottom:32px; font-size:14px;">Sign in to your workspace</p>
+        <div class="auth-box">
+          <div class="auth-tabs">
+            <div class="auth-tab ${isLogin ? 'active' : ''}" onclick="location.hash='login'">Login</div>
+            <div class="auth-tab ${!isLogin ? 'active' : ''}" onclick="location.hash='register'">Sign Up</div>
+          </div>
+          
           <form class="auth-form" onsubmit="actions.login(event, ${isRegister})">
-            <div class="field" style="margin-bottom:20px">
-              <label>Full Name</label>
-              <input name="name" type="text" placeholder="Jane Doe" required>
-            </div>
-            <div class="field" style="margin-bottom:32px">
+            ${!isLogin ? `
+              <div class="auth-field">
+                <label>Full Name</label>
+                <input name="name" type="text" placeholder="Jane Doe" required>
+              </div>
+              <div class="auth-field">
+                <label>Username</label>
+                <input name="username" type="text" placeholder="janedoe" required>
+              </div>
+            ` : `
+              <div class="auth-field">
+                <label>Full Name</label>
+                <input name="name" type="text" placeholder="Jane Doe" required>
+              </div>
+            `}
+            <div class="auth-field">
               <label>Email Address</label>
               <input type="email" name="email" placeholder="jane@company.com" required>
             </div>
-            <button type="submit" class="btn primary" style="width:100%; padding:14px;">
-              ${isRegister ? 'Create Account' : 'Login'}
+            <div class="auth-field">
+              <label>Password</label>
+              <input type="password" name="password" placeholder="••••••••" required>
+            </div>
+            <button type="submit" class="auth-submit">
+              ${isLogin ? 'Login' : 'Create Account'}
             </button>
           </form>
-          <div style="text-align:center; margin-top: 24px; font-size: 13px;">
-            ${isRegister 
-              ? `<a href="#login" style="color:var(--text);">Log in</a>` 
-              : `<a href="#register" style="color:var(--text);">Create one</a>`}
-          </div>
         </div>
       </div>
     </div>`;
@@ -222,28 +342,35 @@ const views = {
     
     let body = components.head('Workspace overview', greeting, 'Welcome back to LaunchGuard AI.', components.btn('+ New scan', 'setup', 'primary'));
     
-    if (!data.hasScan) {
-      body += `<div class="empty-state anim-slide-in">
-        <div class="empty-icon">!</div><h2>No scans yet</h2>
-        <p>Connect your GitHub repository and deployed application to generate your first reliability report.</p>
-        <div style="display:flex; justify-content:center; margin-top:24px;">${components.btn('New Scan', 'setup', 'primary')}</div>
-      </div>`;
-    } else {
-      const stats = [
-        ['Reliability Score', data.score, 'tag lime', 'GOOD'],
-        ['Broken Flows', data.brokenFlows, 'tag danger', 'NEEDS ATTENTION'],
-        ['API Failures', data.apiFailures, 'tag warn', 'WARNING'],
-        ['Performance Score', data.performance || 98, 'tag lime', 'FAST']
-      ];
-      body += `<div class="grid cols4" style="margin-bottom:32px;">
-        ${stats.map(x => components.card(`<div class="split"><div class="stat-label">${x[0]}</div><span class="${x[2]}">${x[3]}</span></div><div class="stat-value">${x[1]}</div>`, 'lift')).join('')}
-      </div>`;
-      
-      const rows = [[data.latestScanName || 'System Scan', data.score, data.latestScanStatus || 'Completed']];
-      body += `<div class="anim-slide-in">
-        ${components.card('<h2>Recent scan runs</h2><table class="table"><thead><tr><th>Scan</th><th>Score</th><th>Status</th></tr></thead><tbody>'+rows.map(r=>`<tr><td>${r[0]}</td><td style="color:var(--lime)">${r[1]}</td><td><span class="tag lime">${r[2]}</span></td></tr>`).join('')+'</tbody></table>')}
-      </div>`;
+    const hasScanned = store.get('hasScanned') === 'true';
+    
+    let score = 0, brokenFlows = 0, apiFailures = 0, performance = 0;
+    let scanName = 'No scans run yet', scanStatus = 'Awaiting Input';
+    
+    if (hasScanned && data.hasScan) {
+      score = data.score;
+      brokenFlows = data.brokenFlows;
+      apiFailures = data.apiFailures;
+      performance = data.performance || 98;
+      scanName = data.latestScanName || 'System Scan';
+      scanStatus = data.latestScanStatus || 'Completed';
     }
+
+    const stats = [
+      ['Reliability Score', score, score === 0 ? 'tag muted' : 'tag lime', score === 0 ? '--' : 'GOOD'],
+      ['Broken Flows', brokenFlows, brokenFlows === 0 ? 'tag muted' : 'tag danger', brokenFlows === 0 ? '--' : 'NEEDS ATTENTION'],
+      ['API Failures', apiFailures, apiFailures === 0 ? 'tag muted' : 'tag warn', apiFailures === 0 ? '--' : 'WARNING'],
+      ['Performance Score', performance, performance === 0 ? 'tag muted' : 'tag lime', performance === 0 ? '--' : 'FAST']
+    ];
+    
+    body += `<div class="grid cols4" style="margin-bottom:32px;">
+      ${stats.map(x => components.card(`<div class="split"><div class="stat-label">${x[0]}</div><span class="${x[2]}">${x[3]}</span></div><div class="stat-value" ${x[1]===0 ? 'style="color:var(--muted)"' : ''}>${x[1]}</div>`, 'lift')).join('')}
+    </div>`;
+    
+    const rows = [[scanName, score, scanStatus]];
+    body += `<div class="anim-slide-in">
+      ${components.card('<h2>Recent scan runs</h2><table class="table"><thead><tr><th>Scan</th><th>Score</th><th>Status</th></tr></thead><tbody>'+rows.map(r=>`<tr><td ${!hasScanned ? 'style="color:var(--muted)"' : ''}>${r[0]}</td><td style="color:var(--lime)">${r[1]}</td><td><span class="tag ${hasScanned ? 'lime' : 'muted'}">${r[2]}</span></td></tr>`).join('')+'</tbody></table>')}
+    </div>`;
     
     body += components.wfNav('report');
     app.innerHTML = components.shell('Overview', 'report', body);
