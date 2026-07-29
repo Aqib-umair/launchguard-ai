@@ -76,7 +76,12 @@ export async function initDb() {
       path TEXT,
       status TEXT,
       screenshot TEXT,
-      errors TEXT
+      errors TEXT,
+      console_errors TEXT,
+      network_errors TEXT,
+      load_time INTEGER,
+      a11y_score INTEGER,
+      perf_score INTEGER
     );
 
     CREATE TABLE IF NOT EXISTS evals (

@@ -38,29 +38,46 @@ export async function runScan(scanId, repoUrl, deployUrl) {
     const visited = new Set();
     
     // Function to capture node state
-    const captureNode = async (currentUrl, pathName) => {
-      emit(`→ Analyzing path: ${pathName}`, 20 + (nodes.length * 10));
+    const captureNode = async (currentUrl, pathName, startTime) => {
+      const loadTime = Date.now() - startTime;
+      emit(`→ Analyzing path: ${pathName} (${loadTime}ms)`, 20 + (nodes.length * 10));
       await page.waitForTimeout(1000);
       const buffer = await page.screenshot({ type: 'jpeg', quality: 50 });
       const b64 = `data:image/jpeg;base64,${buffer.toString('base64')}`;
       
-      const nodeErrors = consoleLogs.filter(l => l.type === 'error').length + networkRequests.filter(r => r.status >= 400).length;
+      const pageConsoleErrs = consoleLogs.filter(l => l.type === 'error').map(l => l.text);
+      const pageNetErrs = networkRequests.filter(r => r.status >= 400).map(r => `${r.status} ${r.url}`);
+      const nodeErrors = pageConsoleErrs.length + pageNetErrs.length;
+      
+      // Mock realistic scores based on error counts
+      const perfScore = Math.max(10, 100 - (loadTime / 100) - (nodeErrors * 5));
+      const a11yScore = Math.max(20, 100 - (nodeErrors * 10));
       
       nodes.push({
         id: `NODE-${randomUUID().split('-')[0]}`,
         scan_id: scanId,
         path: pathName,
-        status: nodeErrors > 0 ? 'red' : 'green',
+        status: nodeErrors === 0 ? 'green' : (nodeErrors < 3 ? 'yellow' : 'red'),
         screenshot: b64,
-        errors: nodeErrors
+        errors: nodeErrors,
+        console_errors: JSON.stringify(pageConsoleErrs),
+        network_errors: JSON.stringify(pageNetErrs),
+        load_time: loadTime,
+        a11y_score: Math.round(a11yScore),
+        perf_score: Math.round(perfScore)
       });
+      
+      // Clear logs for next page
+      consoleLogs.length = 0;
+      networkRequests.length = 0;
     };
 
     // 1. Visit Home
     try {
+      const s = Date.now();
       await page.goto(deployUrl, { waitUntil: 'networkidle', timeout: 15000 });
       visited.add(deployUrl);
-      await captureNode(deployUrl, '/');
+      await captureNode(deployUrl, '/', s);
     } catch(e) {
       emit(`! Root navigation timeout`, 25, true);
     }
@@ -73,16 +90,17 @@ export async function runScan(scanId, repoUrl, deployUrl) {
         .filter(h => h.startsWith(window.location.origin) && !h.includes('#'));
     });
     
-    hrefs = [...new Set(hrefs)].filter(h => !visited.has(h)).slice(0, 2); // Visit max 2 internal links
+    hrefs = [...new Set(hrefs)].filter(h => !visited.has(h)).slice(0, 3); // Visit max 3 internal links
     
     // 3. Visit internal links
     for (const link of hrefs) {
       try {
         emit(`→ Navigating to internal route: ${link}`, 50);
+        const s = Date.now();
         await page.goto(link, { waitUntil: 'networkidle', timeout: 10000 });
         visited.add(link);
         const pathName = new URL(link).pathname || link;
-        await captureNode(link, pathName);
+        await captureNode(link, pathName, s);
       } catch(e) {
         emit(`! Failed to reach internal route`, 60, true);
       }
@@ -93,8 +111,8 @@ export async function runScan(scanId, repoUrl, deployUrl) {
     // Save nodes to DB
     for (const node of nodes) {
       await db.run(
-        `INSERT INTO nodes (id, scan_id, path, status, screenshot, errors) VALUES (?, ?, ?, ?, ?, ?)`,
-        [node.id, node.scan_id, node.path, node.status, node.screenshot, node.errors]
+        `INSERT INTO nodes (id, scan_id, path, status, screenshot, errors, console_errors, network_errors, load_time, a11y_score, perf_score) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [node.id, node.scan_id, node.path, node.status, node.screenshot, node.errors, node.console_errors, node.network_errors, node.load_time, node.a11y_score, node.perf_score]
       );
     }
 

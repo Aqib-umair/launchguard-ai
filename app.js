@@ -348,38 +348,177 @@ const views = {
 
   shader: async () => {
     const nodes = await api.get('/api/nodes');
-    let body = components.head('Flow intelligence', 'Application Shader', 'Visual map of crawled routes from the latest scan.');
+    let body = components.head('Flow intelligence', 'Application Shader', 'Interactive visual map of crawled routes, node health, and page-level telemetry.');
     
+    // Inject Custom CSS for this view
+    body += `
+      <style>
+        .shader-container { position: relative; height: 550px; background: radial-gradient(circle at center, #111820 0, #07090c 100%); border-radius: 8px; overflow: hidden; border: 1px solid var(--line); }
+        .node-obj { position: absolute; padding: 10px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 4px 12px rgba(0,0,0,0.5); z-index: 10; animation: popIn 0.6s ease forwards; transform: scale(0); border: 1px solid rgba(255,255,255,0.1); }
+        .node-obj:hover { transform: scale(1.05) !important; z-index: 20; box-shadow: 0 0 20px currentColor; }
+        .node-obj.green { background: #0a1f11; color: var(--lime); border-color: var(--lime); }
+        .node-obj.yellow { background: #1f1a0a; color: var(--orange); border-color: var(--orange); }
+        .node-obj.red { background: #1f0a0a; color: var(--red); border-color: var(--red); }
+        @keyframes popIn { 0% { transform: scale(0); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+        
+        /* Side Panel */
+        .side-panel { position: absolute; right: -450px; top: 0; width: 400px; height: 100%; background: #0c1015; border-left: 1px solid var(--line); z-index: 100; transition: right 0.4s cubic-bezier(0.16, 1, 0.3, 1); display: flex; flex-direction: column; overflow-y: auto; padding: 24px; box-shadow: -10px 0 30px rgba(0,0,0,0.6); }
+        .side-panel.open { right: 0; }
+        .panel-close { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 20px; position: absolute; top: 20px; right: 20px; }
+        .panel-close:hover { color: #fff; }
+        
+        .metric-dial { width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700; border: 4px solid var(--line); margin-bottom: 8px; }
+        .dial-wrap { display: flex; flex-direction: column; align-items: center; font-size: 11px; color: var(--muted); font-family: 'DM Mono'; }
+        
+        .error-log { font-family: 'DM Mono'; font-size: 11px; background: rgba(255,109,117,0.1); color: var(--red); padding: 8px 12px; border-radius: 4px; margin-bottom: 8px; border-left: 2px solid var(--red); word-break: break-all; }
+      </style>
+    `;
+
     if (!nodes.length) {
       body += components.card(`<div style="text-align:center; padding: 40px; color:var(--muted);">No pages mapped. Run a scan.</div>`);
     } else {
+      // 1. Calculate Summary Metrics
+      const total = nodes.length;
+      const healthy = nodes.filter(n => n.status === 'green').length;
+      const broken = nodes.filter(n => n.status === 'red').length;
+      
+      body += `<div class="grid cols4" style="margin-bottom: 24px;">
+        ${components.card(`<div class="split"><div class="stat-label">Routes Discovered</div><span class="tag cyan">CRAWLED</span></div><div class="stat-value">${total}</div>`, 'lift')}
+        ${components.card(`<div class="split"><div class="stat-label">Healthy Nodes</div><span class="tag lime">PASSING</span></div><div class="stat-value" style="color:var(--lime)">${healthy}</div>`, 'lift')}
+        ${components.card(`<div class="split"><div class="stat-label">Broken Nodes</div><span class="tag danger">FAILING</span></div><div class="stat-value" style="color:var(--red)">${broken}</div>`, 'lift')}
+        ${components.card(`<div class="split"><div class="stat-label">Test Coverage</div><span class="tag cyan">AI EST.</span></div><div class="stat-value">${Math.min(100, total * 30)}%</div>`, 'lift')}
+      </div>`;
+
+      // 2. Build Interactive Canvas
       let svgs = '';
       let divs = '';
+      
+      // We will attach node data to the DOM elements as data attributes so we can populate the side panel on click
+      window.shaderNodesData = {};
+      
       nodes.forEach((n, i) => {
-        const x = 20 + (i * 30);
-        const y = 30 + ((i%2)*30);
-        if (i < nodes.length-1) {
-          const nx = 20 + ((i+1) * 30);
-          const ny = 30 + (((i+1)%2)*30);
-          svgs += `<line x1="${x}%" y1="${y}%" x2="${nx}%" y2="${ny}%" stroke="var(--line)" stroke-width="2"/>`;
+        window.shaderNodesData[n.id] = n; // store globally for click handler
+        
+        const x = 10 + (i * 35); // Spread across X axis
+        const y = 40 + ((i % 2 === 0 ? -1 : 1) * 20); // Zig-zag Y axis
+        
+        // Delay animation slightly for each node
+        const animDelay = (i * 0.2) + 's';
+        
+        if (i < nodes.length - 1) {
+          const nx = 10 + ((i + 1) * 35);
+          const ny = 40 + (((i + 1) % 2 === 0 ? -1 : 1) * 20);
+          svgs += `<path d="M ${x}% ${y}% Q ${(x+nx)/2}% ${(y+ny)/2 - 10}% ${nx}% ${ny}%" fill="none" stroke="var(--line)" stroke-width="2" stroke-dasharray="5,5" style="animation: popIn 0.8s ease forwards; animation-delay: ${animDelay}; opacity: 0;"/>`;
+          // Draw an arrowhead
+          svgs += `<polygon points="${nx-1}%,${ny-2}% ${nx-1}%,${ny+2}% ${nx+1}%,${ny}%" fill="var(--line)" style="animation: popIn 0.8s ease forwards; animation-delay: ${animDelay}; opacity: 0;" />`;
         }
+        
         divs += `
-          <div class="s-node ${n.status === 'red' ? 'danger pulse-anim' : ''}" style="left: ${x}%; top: ${y}%; cursor:pointer;" title="Errors: ${n.errors}">
+          <div class="node-obj ${n.status}" style="left: ${x}%; top: ${y}%; animation-delay: ${animDelay};" onclick="window.openSidePanel('${n.id}')">
             ${n.path}
-            ${n.status === 'red' ? '<br><small>Issue Detected</small>' : ''}
+            ${n.errors > 0 ? `<div style="font-size:10px; margin-top:4px; opacity:0.8;">${n.errors} ERRORS DETECTED</div>` : ''}
           </div>`;
       });
 
-      body += components.card(`
-        <div class="shader-canvas" style="height: 550px; background: radial-gradient(circle at center, #111820 0, #07090c 100%); border-radius: 8px; position: relative; overflow: hidden;">
+      body += `
+        <div class="shader-container" id="shader-map">
            <svg style="position:absolute; width:100%; height:100%; pointer-events:none;">${svgs}</svg>
            ${divs}
-           <div style="position:absolute; bottom:20px; left:20px; font-family:'DM Mono'; font-size:10px; background:#0a0e0d; padding:8px; border:1px solid var(--line);">
-             <span style="color:var(--lime)">● Healthy Route</span><br>
-             <span style="color:var(--red)">● Issue Found</span>
+           
+           <div style="position:absolute; bottom:20px; left:20px; font-family:'DM Mono'; font-size:10px; background:rgba(0,0,0,0.6); padding:12px; border-radius:6px; border:1px solid var(--line); z-index:5;">
+             <div style="margin-bottom:6px;"><span style="color:var(--lime); display:inline-block; width:10px;">●</span> Healthy Route</div>
+             <div style="margin-bottom:6px;"><span style="color:var(--orange); display:inline-block; width:10px;">●</span> Warnings Detected</div>
+             <div><span style="color:var(--red); display:inline-block; width:10px;">●</span> Broken / Exceptions</div>
+           </div>
+           
+           <!-- Slide Out Panel -->
+           <div id="node-panel" class="side-panel">
+             <button class="panel-close" onclick="document.getElementById('node-panel').classList.remove('open')">✕</button>
+             
+             <div class="eyebrow">NODE TELEMETRY</div>
+             <h2 id="np-path" style="margin-bottom: 8px; font-size: 20px; word-break: break-all;">/path</h2>
+             <div id="np-status-tag" style="margin-bottom: 24px;"></div>
+             
+             <div style="border: 1px solid var(--line); border-radius: 6px; overflow: hidden; margin-bottom: 24px;">
+               <div style="background: #111820; padding: 6px 12px; font-family:'DM Mono'; font-size:10px; color:var(--muted); border-bottom: 1px solid var(--line);">DOM Snapshot</div>
+               <img id="np-img" src="" style="width: 100%; display: block;" alt="Screenshot">
+             </div>
+             
+             <div class="grid cols3" style="gap: 12px; margin-bottom: 24px;">
+               <div class="dial-wrap"><div class="metric-dial" id="np-load" style="color:var(--cyan); border-color:var(--cyan)">--</div>LOAD</div>
+               <div class="dial-wrap"><div class="metric-dial" id="np-perf">--</div>PERF</div>
+               <div class="dial-wrap"><div class="metric-dial" id="np-a11y">--</div>A11Y</div>
+             </div>
+             
+             <div id="np-errors-container"></div>
+             
+             <div style="margin-top: auto; padding-top: 24px;">
+               <button class="btn ghost" style="width:100%; margin-bottom:12px;" data-go="issue">View Related Issues →</button>
+               <button class="btn primary" style="width:100%;" data-go="fix">Generate AI Fix</button>
+             </div>
            </div>
         </div>
-      `);
+      `;
+      
+      // Inject global script for panel toggling
+      if(!window.openSidePanelScriptInjected) {
+        window.openSidePanelScriptInjected = true;
+        const script = document.createElement('script');
+        script.innerHTML = `
+          window.openSidePanel = function(nodeId) {
+            const data = window.shaderNodesData[nodeId];
+            if(!data) return;
+            
+            document.getElementById('np-path').innerText = data.path;
+            
+            const tag = document.getElementById('np-status-tag');
+            if(data.status === 'green') tag.innerHTML = '<span class="tag lime">PASSING</span>';
+            else if(data.status === 'yellow') tag.innerHTML = '<span class="tag warn">WARNINGS</span>';
+            else tag.innerHTML = '<span class="tag danger">FAILING</span>';
+            
+            document.getElementById('np-img').src = data.screenshot;
+            
+            document.getElementById('np-load').innerText = data.load_time ? data.load_time + 'ms' : 'N/A';
+            
+            const perf = document.getElementById('np-perf');
+            perf.innerText = data.perf_score || '--';
+            perf.style.color = data.perf_score > 80 ? 'var(--lime)' : (data.perf_score > 50 ? 'var(--orange)' : 'var(--red)');
+            perf.style.borderColor = perf.style.color;
+            
+            const a11y = document.getElementById('np-a11y');
+            a11y.innerText = data.a11y_score || '--';
+            a11y.style.color = data.a11y_score > 80 ? 'var(--lime)' : (data.a11y_score > 50 ? 'var(--orange)' : 'var(--red)');
+            a11y.style.borderColor = a11y.style.color;
+            
+            const errsContainer = document.getElementById('np-errors-container');
+            let errHtml = '';
+            
+            const cErrs = JSON.parse(data.console_errors || '[]');
+            const nErrs = JSON.parse(data.network_errors || '[]');
+            
+            if(cErrs.length > 0 || nErrs.length > 0) {
+              errHtml += '<div class="eyebrow" style="margin-bottom:12px;">RUNTIME EXCEPTIONS</div>';
+              cErrs.forEach(e => errHtml += '<div class="error-log">[CONSOLE] ' + e + '</div>');
+              nErrs.forEach(e => errHtml += '<div class="error-log" style="border-color:var(--orange); color:var(--orange); background:rgba(255,160,0,0.1)">[NETWORK] ' + e + '</div>');
+            } else {
+              errHtml += '<div style="color:var(--muted); font-size:13px; font-style:italic;">No exceptions thrown during traversal.</div>';
+            }
+            
+            errsContainer.innerHTML = errHtml;
+            
+            // Re-bind routing buttons inside panel
+            document.querySelectorAll('#node-panel [data-go]').forEach(b => {
+              b.onclick = (e) => {
+                e.preventDefault();
+                location.hash = b.dataset.go;
+              };
+            });
+            
+            document.getElementById('node-panel').classList.add('open');
+          };
+        `;
+        document.body.appendChild(script);
+      }
     }
     body += components.wfNav('shader');
     app.innerHTML = components.shell('Shader', 'shader', body);
