@@ -1,4 +1,3 @@
-import { chromium } from 'playwright';
 import { scanEmitter } from './emitter.js';
 import { getDb } from './db.js';
 import { analyzeScanData } from './ai.js';
@@ -36,6 +35,8 @@ export async function runScan(scanId, repoUrl, deployUrl) {
       consoleLogs.push({ type: 'error', text: 'TypeError: Cannot read properties of undefined (reading \'length\')' });
       networkRequests.push({ url: 'https://api.github.com/test', status: 500 });
     } else {
+      const playwright = await import('playwright');
+      const chromium = playwright.chromium;
       browser = await chromium.launch({ headless: true });
       context = await browser.newContext({ viewport: { width: 1280, height: 720 }, userAgent: 'LaunchGuard-AI-Agent/1.0' });
       page = await context.newPage();
