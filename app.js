@@ -558,16 +558,35 @@ const views = {
   },
   
   setup: () => {
-    let body = components.head('Create a scan', 'New scan setup', 'Give your agent a starting point. Playwright will crawl the root deployment URL.');
+    let body = components.head('Create a scan', 'New scan setup', 'Give your agent a starting point. LaunchGuard will clone and analyze the source code.');
     body += components.progressTracker('setup');
     body += `<div class="grid cols2">
       ${components.card(`<form class="form" onsubmit="actions.startScan(event)">
-        <div class="field"><label>Scan name</label><input name="scanName" required value="Playwright End-to-End Scan"></div>
-        <div class="field"><label>GitHub Repository URL</label><input name="repoUrl" required value="https://github.com/launchguard/example"></div>
-        <div class="field"><label>Deployment URL</label><input name="deployUrl" required type="url" value="https://example.com"></div>
+        <div class="field">
+          <label>Scan name</label>
+          <input name="scanName" required value="Playwright End-to-End Scan">
+        </div>
+        <div class="field">
+          <label>GitHub Repository URL (Required)</label>
+          <input name="repoUrl" required value="https://github.com/launchguard/example">
+          <div style="font-size:12px; color:var(--muted); margin-top:4px;">Used to understand your source code, architecture, dependencies, README, and project structure.</div>
+        </div>
+        <div class="field">
+          <label>Deployment URL (Optional)</label>
+          <input name="deployUrl" type="url" value="https://example.com">
+          <div style="font-size:12px; color:var(--muted); margin-top:4px;">If provided, LaunchGuard will also perform a live Playwright scan against the deployed application.</div>
+        </div>
         <button type="submit" class="btn primary" style="margin-top: 24px; padding: 14px 24px;">Start Scan →</button>
       </form>`)}
-      ${components.card('<div class="eyebrow">AI Agent Logic</div><h2>Critical path discovery</h2><p class="sub">The agent dynamically crawls pages, takes screenshots, and analyzes DOM errors in real time.</p>')}
+      ${components.card(`
+        <div class="eyebrow">SCAN TYPES</div>
+        
+        <h3 style="margin-top:16px; margin-bottom:8px; color:#fff;">Repository Only Scan</h3>
+        <p class="sub" style="margin-bottom:12px;">Analyzes README, package.json, Folder Structure, Dependencies, Framework, Configuration, Source Code, and Potential Risks.</p>
+        
+        <h3 style="margin-top:24px; margin-bottom:8px; color:#fff;">Repository + Deployment Scan</h3>
+        <p class="sub">Everything above PLUS Playwright, DOM, Network, Performance, Accessibility, Screenshots, and Console Errors.</p>
+      `)}
     </div>`;
     app.innerHTML = components.shell('New Scan Setup', 'setup', body);
     bindEvents();
@@ -1215,10 +1234,19 @@ const views = {
             
           } catch(err) {
             clearInterval(intv);
-            if (step) {
-              step.innerText = '[ERROR] ' + err.message;
-              step.style.color = 'var(--red)';
-            }
+            loading.style.display = 'none';
+            result.style.display = 'block';
+            result.innerHTML = \`
+              <div style="background: rgba(255, 77, 77, 0.05); border: 1px solid var(--red); border-radius: 8px; padding: 24px; text-align:center;">
+                <div style="font-weight:bold; color:var(--red); font-size:18px; margin-bottom:8px;">AI Analysis Failed</div>
+                <div style="color:var(--text); font-size:14px; margin-bottom:24px;">Reason: \${err.message}</div>
+                <div style="display:flex; gap:12px; justify-content:center;">
+                  <button class="btn primary" onclick="window.generateAIFix('\${issueId}', '\${mode}', '\${model}')">Retry</button>
+                  <button class="btn ghost" onclick="document.getElementById('aifix-setup').style.display='block'; document.getElementById('aifix-result').style.display='none';">Change AI Model</button>
+                  <button class="btn ghost" onclick="location.hash='issue'">Go Back</button>
+                </div>
+              </div>
+            \`;
           }
         };
         
@@ -1232,23 +1260,39 @@ const views = {
                 <div><span style="color:var(--lime);">✓</span> Playwright logs processed</div>
                 <div><span style="color:var(--lime);">✓</span> Stack trace analyzed</div>
                 <div><span style="color:var(--lime);">✓</span> Affected files identified</div>
-                <div><span style="color:var(--lime);">✓</span> Prompt generated successfully</div>
               </div>
             </div>
             
             <div class="res-section">
-              <h3>Executive Summary</h3>
-              <p>\${data.executive_summary || 'No summary provided.'}</p>
+              <h3>Analysis Sources</h3>
+              <ul style="color:var(--muted); font-size:14px; line-height:1.8; list-style-type:none; padding:0; font-family:'DM Mono';">
+                <li><span style="color:var(--lime); margin-right:8px;">✓</span> README.md</li>
+                <li><span style="color:var(--lime); margin-right:8px;">✓</span> package.json</li>
+                <li><span style="color:var(--lime); margin-right:8px;">✓</span> Source files</li>
+                <li><span style="color:var(--lime); margin-right:8px;">✓</span> Playwright scan (if deployment provided)</li>
+                <li><span style="color:var(--lime); margin-right:8px;">✓</span> Console logs</li>
+                <li><span style="color:var(--lime); margin-right:8px;">✓</span> Network requests</li>
+                <li><span style="color:var(--lime); margin-right:8px;">✓</span> Stack traces</li>
+                <li><span style="color:var(--lime); margin-right:8px;">✓</span> Accessibility report</li>
+              </ul>
             </div>
             
             <div class="res-section">
-              <h3>Root Cause Assessment</h3>
-              <p>\${data.root_cause || 'No root cause identified.'}</p>
+              <h3>Repository Summary</h3>
+              <p>\${data.repository_summary || 'No repository summary provided.'}</p>
             </div>
             
             <div class="res-section">
-              <h3>Repository Context</h3>
-              <p>\${data.repository_context || 'Repository context analyzed.'}</p>
+              <h3>Problem Analysis</h3>
+              <div style="background:#080b0e; border:1px solid var(--line); border-radius:6px; padding:16px; margin-bottom:12px;">
+                <div style="display:flex; justify-content:space-between; margin-bottom:12px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:12px;">
+                  <div><span style="color:var(--muted); font-size:12px;">BUG ID</span><br><b style="color:var(--lime);">\${data.problem_analysis?.bug_id || 'N/A'}</b></div>
+                  <div><span style="color:var(--muted); font-size:12px;">SEVERITY</span><br><b style="color:\${data.problem_analysis?.severity === 'Critical' ? 'var(--red)' : 'var(--orange)'};">\${data.problem_analysis?.severity || 'Medium'}</b></div>
+                  <div><span style="color:var(--muted); font-size:12px;">IMPACT</span><br><b style="color:#fff;">\${data.problem_analysis?.production_impact || 'Unknown'}</b></div>
+                </div>
+                <p><b>Why it happened:</b> \${data.problem_analysis?.why_happened || 'N/A'}</p>
+                <p><b>Affected component:</b> \${data.problem_analysis?.affected_component || 'N/A'}</p>
+              </div>
             </div>
             
             \${data.architecture_mermaid ? \`
@@ -1261,34 +1305,61 @@ const views = {
             </div>\` : ''}
             
             <div class="res-section">
+              <h3>Engineering Solution</h3>
+              <div style="margin-bottom:12px;">
+                <b>Suggested Changes:</b>
+                <p style="margin-top:8px;">\${data.engineering_solution?.suggested_changes || 'N/A'}</p>
+                <b>Steps to Fix:</b>
+                <ul style="color:var(--muted); font-size:13px; margin-top:8px; padding-left:20px;">
+                  \${(data.engineering_solution?.step_by_step || []).map(s => '<li>'+s+'</li>').join('')}
+                </ul>
+              </div>
+              <div class="grid cols2" style="gap:16px;">
+                <div>
+                  <div style="font-size:11px; font-family:'DM Mono'; color:var(--red); margin-bottom:4px;">BEFORE</div>
+                  <div class="code-block diff-remove">\${data.engineering_solution?.before_code || 'N/A'}</div>
+                </div>
+                <div>
+                  <div style="font-size:11px; font-family:'DM Mono'; color:var(--lime); margin-bottom:4px;">AFTER</div>
+                  <div class="code-block diff-add">\${data.engineering_solution?.after_code || 'N/A'}</div>
+                </div>
+              </div>
+              \${data.engineering_solution?.regression_tests ? \`
+              <div style="margin-top:16px;">
+                <b>Regression Tests:</b>
+                <ul style="color:var(--muted); font-size:14px; line-height:1.8; list-style-type:none; padding:0; margin-top:8px;">
+                  \${data.engineering_solution.regression_tests.map(rt => \`<li><span style="color:var(--lime); margin-right:8px;">❖</span>\${rt}</li>\`).join('')}
+                </ul>
+              </div>\` : ''}
+            </div>
+            
+            <div class="res-section">
               <h3>Developer Prompt</h3>
               <p>Paste this prompt directly into your AI coding assistant to implement the fix.</p>
               <div class="code-block">\${data.developer_prompt || 'Prompt not generated.'}</div>
               <div style="display:flex; gap:12px; margin-top:12px; flex-wrap:wrap;">
                 <button class="btn primary" onclick="alert('Copied Prompt!')">Copy Prompt</button>
-                <button class="btn ghost" onclick="alert('Copied for Cursor')">Copy for Cursor</button>
-                <button class="btn ghost" onclick="alert('Copied for Codex')">Copy for Codex</button>
-                <button class="btn ghost" onclick="alert('Copied for Claude Code')">Copy for Claude Code</button>
-                <button class="btn ghost" onclick="alert('Copied for Antigravity')">Copy for Antigravity</button>
                 <button class="btn ghost" onclick="alert('Downloading Prompt...')">Download Prompt</button>
               </div>
             </div>
             
             <div class="res-section">
-              <h3>How to Fix This Bug</h3>
+              <h3>How to Use</h3>
               <p style="color:var(--muted); font-size:14px; margin-bottom:16px;">Step-by-step instructions to apply this fix.</p>
               <div style="background:#080b0e; padding:20px; border-radius:6px; border:1px solid var(--line);">
                 \${[
-                  'Open Cursor (or your preferred AI IDE)',
-                  'Open the cloned repository.',
-                  'Paste the generated engineering prompt.',
-                  'Let the AI generate code.',
-                  'Review the generated changes.',
-                  'Run npm install',
-                  'Run npm test',
-                  'Run npm run dev',
+                  'Copy the generated prompt.',
+                  'Open your preferred AI coding IDE (Cursor, Windsurf, etc).',
+                  'Open your GitHub repository.',
+                  'Paste the generated prompt.',
+                  'Allow the AI to generate the fix.',
+                  'Review the generated code.',
+                  'Run <code>npm install</code>',
+                  'Run <code>npm test</code>',
+                  'Run <code>npm run dev</code>',
                   'Verify the bug is fixed.',
-                  'Commit and push the changes to GitHub.'
+                  'Commit your changes.',
+                  'Push to GitHub.'
                 ].map((step, idx, arr) => \`
                   <div style="display:flex; gap:16px; margin-bottom:\${idx === arr.length-1 ? '0' : '16px'};">
                     <div style="width:24px; height:24px; border-radius:12px; background:var(--lime); color:#000; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:12px; flex-shrink:0;">\${idx+1}</div>
@@ -1298,18 +1369,7 @@ const views = {
               </div>
             </div>
             
-            \${data.regression_tests ? \`
-            <div class="res-section">
-              <h3>Regression Tests</h3>
-              <p style="color:var(--muted); font-size:14px; margin-bottom:16px;">Run these tests to ensure the bug is fully eliminated.</p>
-              <ul style="color:var(--muted); font-size:14px; line-height:1.8; list-style-type:none; padding:0;">
-                \${data.regression_tests.map(rt => \`<li><span style="color:var(--lime); margin-right:8px;">❖</span>\${rt}</li>\`).join('')}
-              </ul>
-            </div>\` : ''}
-            
             <div style="display:flex; gap:12px; border-top:1px solid var(--line); padding-top:24px; flex-wrap:wrap;">
-              <button class="btn primary" onclick="alert('Copied Prompt!')">Copy Prompt</button>
-              <button class="btn ghost" onclick="alert('Downloading...')">Download Prompt</button>
               <button class="btn ghost" onclick="alert('Opening Repository...')">Open Repository</button>
               <button class="btn ghost" onclick="alert('Opening Issue...')">Open Issue</button>
               <button class="btn ghost" style="margin-left:auto;" onclick="location.reload()">Generate Again</button>

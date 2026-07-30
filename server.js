@@ -148,14 +148,27 @@ app.post('/api/ai/fix', async (req, res) => {
     const prompt = `You are a Principal AI Software Engineer analyzing a production bug.
 Return a JSON object EXACTLY matching this structure:
 {
-  "executive_summary": "High level summary explaining what is broken, seriousness, and production impact.",
-  "root_cause": "Detailed root cause analyzing why it happened, affected file, and affected component.",
-  "repository_context": "Explain how this repository works. Summarize the README. Detect Frontend, Backend, Database, Framework, Dependencies, Build System. Explain project architecture in beginner-friendly language.",
-  "architecture_mermaid": "Generate a clean visual architecture diagram based on the repository (README, package.json, Frameworks). Return RAW Mermaid markdown ONLY.",
-  "code_explanation": "Explanation of fix",
-  "developer_prompt": "Issue Summary: ... \\n Affected Files: ... \\n Logs: ... \\n Stack Trace: ... \\n Expected Behaviour: ... \\n Acceptance Criteria: ...",
-  "regression_tests": ["Test 1", "Test 2"],
-  "confidence_score": 96
+  "repository_summary": "Explain what the project does. Frontend framework, Backend framework, Database, Authentication, Main dependencies, Build system. Use beginner-friendly language.",
+  "architecture_mermaid": "Generate a clean visual architecture diagram based on the repository (README, package.json). Do NOT hardcode this. Return RAW Mermaid markdown ONLY without backticks.",
+  "problem_analysis": {
+    "bug_id": "${issueId}",
+    "severity": "Severity level",
+    "why_happened": "Explanation of why the bug occurred",
+    "production_impact": "Impact on production",
+    "affected_files": ["file1.js"],
+    "affected_function": "Function name",
+    "affected_component": "Component name",
+    "root_cause": "Detailed root cause"
+  },
+  "engineering_solution": {
+    "step_by_step": ["Step 1 explanation", "Step 2 explanation"],
+    "before_code": "Raw code before changes",
+    "after_code": "Raw code after changes",
+    "suggested_changes": "Explanation of changes made",
+    "regression_tests": ["Test 1", "Test 2"],
+    "confidence_score": 96
+  },
+  "developer_prompt": "Generate ONE complete engineering prompt that is ready to paste into an AI coding assistant (e.g. Cursor, Claude Code, Codex, Antigravity, GitHub Copilot, Windsurf)."
 }
 
 Repository Context:
