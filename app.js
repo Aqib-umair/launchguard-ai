@@ -1321,22 +1321,23 @@ const views = {
 
 // Router
 const router = async () => {
-  let hash = location.hash.slice(1) || '';
+  let fullHash = location.hash.slice(1) || '';
+  let viewName = fullHash.split('?')[0];
   
-  if (!currentUser && !['landing', 'login', 'register'].includes(hash)) {
+  if (!currentUser && !['landing', 'login', 'register'].includes(viewName)) {
     location.hash = 'landing';
     return;
   }
-  if (currentUser && ['landing', 'login', 'register', ''].includes(hash)) {
+  if (currentUser && ['landing', 'login', 'register', ''].includes(viewName)) {
     location.hash = 'report';
     return;
   }
   
-  if (hash === '') hash = 'landing';
+  if (viewName === '') viewName = 'landing';
 
-  if (hash === 'login') views.auth(false);
-  else if (hash === 'register') views.auth(true);
-  else if (views[hash]) await views[hash]();
+  if (viewName === 'login') views.auth(false);
+  else if (viewName === 'register') views.auth(true);
+  else if (views[viewName]) await views[viewName]();
   else await views.report();
 };
 
