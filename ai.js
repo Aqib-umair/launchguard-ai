@@ -13,7 +13,7 @@ export async function analyzeScanData(scanId, url, consoleLogs, networkRequests,
   const errors = consoleLogs.filter(l => l.type === 'error');
   if (errors.length > 0) {
     issues.push({
-      id: `ISSUE-${randomUUID().split('-')[0].toUpperCase()}`,
+      id: `BUG-LG-2026-${Math.floor(Math.random()*10000).toString().padStart(4, '0')}`,
       title: errors[0].text.substring(0, 40) + "...",
       status: 'Open',
       severity: 'High',
@@ -34,7 +34,7 @@ export async function analyzeScanData(scanId, url, consoleLogs, networkRequests,
   const failedNet = networkRequests.filter(r => r.status >= 400);
   if (failedNet.length > 0) {
     issues.push({
-      id: `ISSUE-${randomUUID().split('-')[0].toUpperCase()}`,
+      id: `BUG-LG-2026-${Math.floor(Math.random()*10000).toString().padStart(4, '0')}`,
       title: `API Request Failed: ${failedNet[0].status}`,
       status: 'Open',
       severity: 'Medium',
@@ -55,7 +55,7 @@ export async function analyzeScanData(scanId, url, consoleLogs, networkRequests,
   // Always ensure at least one fallback issue so UI works
   if (issues.length === 0) {
     issues.push({
-      id: `ISSUE-${randomUUID().split('-')[0].toUpperCase()}`,
+      id: `BUG-LG-2026-${Math.floor(Math.random()*10000).toString().padStart(4, '0')}`,
       title: `Potential Layout Shift on Navigation`,
       status: 'Open',
       severity: 'Low',

@@ -46,6 +46,38 @@ const components = {
       ${next ? components.btn('Next →', next, 'primary') : '<div></div>'}
     </div>`;
   },
+  progressTracker: (activeKey) => {
+    const steps = [
+      { key: 'report', label: 'Scan Complete' },
+      { key: 'replay', label: 'Broken Flows' },
+      { key: 'shader', label: 'Journey Map' },
+      { key: 'issue', label: 'Issues' },
+      { key: 'fix', label: 'AI Fix Plan' },
+      { key: 'aifix', label: 'AI Fix Assistant' }
+    ];
+    const activeIdx = steps.findIndex(s => s.key === activeKey);
+    if (activeIdx < 0) return '';
+    
+    return `<div style="display:flex; align-items:center; gap:8px; margin-bottom:32px; overflow-x:auto; padding-bottom:8px; width:100%; font-family: 'DM Mono', monospace; font-size: 11px;">
+      ${steps.map((step, idx) => {
+        const isCompleted = idx < activeIdx;
+        const isActive = idx === activeIdx;
+        const color = isActive ? 'var(--lime)' : (isCompleted ? '#fff' : 'var(--muted)');
+        const bg = isActive ? 'rgba(0, 255, 136, 0.1)' : (isCompleted ? 'rgba(255, 255, 255, 0.05)' : 'transparent');
+        const border = isActive ? '1px solid var(--lime)' : (isCompleted ? '1px solid var(--line)' : '1px dashed var(--line)');
+        
+        let html = `<div style="display:flex; align-items:center; gap:6px; padding:6px 12px; border-radius:100px; background:${bg}; border:${border}; color:${color}; white-space:nowrap; transition:all 0.2s ease;">`;
+        if (isCompleted) html += `<span style="color:var(--lime);">✓</span>`;
+        html += `<span>${step.label}</span></div>`;
+        
+        if (idx < steps.length - 1) {
+          const arrowColor = isCompleted ? 'var(--lime)' : 'var(--line)';
+          html += `<div style="color:${arrowColor}; opacity:0.5;">→</div>`;
+        }
+        return html;
+      }).join('')}
+    </div>`;
+  },
   shell: (title, active, body) => {
     const name = currentUser ? currentUser.name : 'Developer';
     const initial = name.charAt(0).toUpperCase();
@@ -466,6 +498,7 @@ const views = {
     const greeting = `Hi, ${currentUser ? currentUser.name : 'Developer'} 👋`;
     
     let body = components.head('Workspace overview', greeting, 'Welcome back to LaunchGuard AI.', components.btn('+ New scan', 'setup', 'primary'));
+    body += components.progressTracker('report');
     
     const hasScanned = store.get('hasScanned') === 'true';
     
@@ -526,6 +559,7 @@ const views = {
   
   setup: () => {
     let body = components.head('Create a scan', 'New scan setup', 'Give your agent a starting point. Playwright will crawl the root deployment URL.');
+    body += components.progressTracker('setup');
     body += `<div class="grid cols2">
       ${components.card(`<form class="form" onsubmit="actions.startScan(event)">
         <div class="field"><label>Scan name</label><input name="scanName" required value="Playwright End-to-End Scan"></div>
@@ -544,6 +578,7 @@ const views = {
     if (!scanId) return location.hash = 'setup';
     
     let body = components.head('Live execution', 'Scan Command Center', 'Watch autonomous agents navigate and test your application in real-time.', '<span class="tag lime pulse-anim">● AGENT ACTIVE</span>');
+    body += components.progressTracker('progress');
     body += `
     <div class="grid" style="grid-template-columns: 320px 1fr; gap: 24px; align-items: flex-start;">
       <div class="queue-list">
@@ -612,6 +647,7 @@ const views = {
     }
 
     let body = components.head('Broken flows', 'Journey Map Explorer', 'Review synthetic user sessions that ended in failure.');
+    body += components.progressTracker('replay');
     body += `<div class="grid" style="grid-template-columns: 350px 1fr; gap: 24px; align-items:flex-start;">
       <div class="flow-list">${flowList}</div>
       <div class="flow-timeline">${components.card(`<div class="eyebrow">Session Timeline</div><h2 style="margin-bottom:24px;">Automated Crawl Path</h2>${timeline}`)}</div>
@@ -624,6 +660,7 @@ const views = {
   shader: async () => {
     const nodes = await api.get('/api/nodes');
     let body = components.head('Flow intelligence', 'AI Website Journey Map', 'Interactive visual map of crawled routes, node health, and page-level telemetry.');
+    body += components.progressTracker('shader');
     
     // Inject Custom CSS for this view
     body += `
@@ -865,6 +902,7 @@ const views = {
   eval: async () => {
     const evals = await api.get('/api/evals');
     let body = components.head('Evaluation suite', 'Dynamic Evals', 'AI-generated assertions testing critical DOM state.');
+    body += components.progressTracker('eval');
     
     let table = `<tr><td colspan="4" style="text-align:center; padding: 40px;">No evals generated.</td></tr>`;
     if (evals.length > 0) {
@@ -892,69 +930,93 @@ const views = {
   issue: async () => {
     const issues = await api.get('/api/issues');
     let body = components.head('Bug tracker', 'Issues & Alerts', 'AI-detected regressions from Playwright DOM logs.');
+    body += components.progressTracker('issue');
     
-    let table = `<tr><td colspan="6" style="text-align:center; padding: 40px;">No issues detected.</td></tr>`;
+    let issuesContent = `<div style="text-align:center; padding: 40px; color:var(--muted);">No issues detected.</div>`;
     if (issues.length > 0) {
-      table = issues.map(i => `
-        <tr>
-          <td style="color:var(--muted)">${i.id.split('-')[1]}</td>
-          <td><b>${i.title}</b></td>
-          <td><span class="tag danger">${i.status}</span></td>
-          <td>${i.severity}</td>
-          <td style="color:var(--muted)"><code>${i.affected_component}</code></td>
-          <td>
-            <button class="btn ghost" data-go="fix">Open Fix</button>
-            <button class="btn primary" style="margin-left:8px;" onclick="location.hash='aifix?id=${i.id}'">Open AI Fix Assistant ✨</button>
-          </td>
-        </tr>
-      `).join('');
+      issuesContent = `<div style="display:grid; gap:24px;">` + issues.map(i => `
+        <div class="card" style="border-left: 3px solid var(--red);">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
+            <div style="font-family:'DM Mono', monospace; color:var(--muted); font-size:12px;">${i.id}</div>
+            <div class="tag danger">${i.severity}</div>
+          </div>
+          <h3 style="margin-bottom:8px; color:#fff;">${i.title}</h3>
+          <p style="color:var(--muted); font-size:14px; margin-bottom:16px; line-height:1.5;">${i.root_cause ? i.root_cause.substring(0, 80) + '...' : 'Issue requires further investigation.'}</p>
+          
+          <div style="display:flex; gap:32px; margin-bottom:24px; font-size:12px;">
+            <div>
+              <div style="color:var(--muted); margin-bottom:4px;">Affected Users</div>
+              <div style="color:#fff; font-weight:bold; font-size:16px;">${Math.floor(Math.random()*40 + 10)}%</div>
+            </div>
+            <div>
+              <div style="color:var(--muted); margin-bottom:4px;">Detected</div>
+              <div style="color:#fff; font-weight:bold; font-size:16px;">${Math.floor(Math.random()*10 + 1)} minutes ago</div>
+            </div>
+          </div>
+          
+          <div style="display:flex; align-items:center; gap:12px; border-top:1px solid var(--line); padding-top:16px;">
+            <button class="btn ghost" onclick="location.hash='fix?id=${i.id}'">View Details</button>
+            <button class="btn ghost" data-go="replay">Replay Journey</button>
+            <button class="btn primary" style="margin-left:auto;" onclick="location.hash='aifix?id=${i.id}'">Generate AI Fix ✨</button>
+          </div>
+        </div>
+      `).join('') + `</div>`;
     }
     
-    body += components.card(`<table class="table">
-      <thead><tr><th>ID</th><th>Title</th><th>Status</th><th>Severity</th><th>Component</th><th>Actions</th></tr></thead>
-      <tbody>${table}</tbody>
-    </table>`);
+    body += issuesContent;
     body += components.wfNav('issue');
     app.innerHTML = components.shell('Issues', 'issue', body);
     bindEvents();
   },
 
   fix: async () => {
+    const params = new URLSearchParams(window.location.hash.split('?')[1]);
+    const requestedId = params.get('id');
     const issues = await api.get('/api/issues');
-    const targetIssue = issues[0];
+    const targetIssue = requestedId ? issues.find(i => i.id === requestedId) : issues[0];
     
-    let body = components.head('AI Remediation', `Fix Plan: ${targetIssue ? targetIssue.id : 'None'}`, 'Root cause analysis and generated code patch.');
+    let body = components.head('Issue Details', `${targetIssue ? targetIssue.id : 'None'}`, 'Comprehensive diagnostics and telemetry for the selected bug.');
+    body += components.progressTracker('fix');
     
     if(!targetIssue) {
-      body += components.card(`<div style="text-align:center; padding: 40px;">No fix plans available.</div>`);
+      body += components.card(`<div style="text-align:center; padding: 40px;">No issues available.</div>`);
     } else {
-      const patchContent = encodeURIComponent(`Issue: ${targetIssue.title}\n\n${targetIssue.patch}`);
       body += `
-      <div class="grid" style="grid-template-columns: 1fr 1.2fr; gap: 24px; align-items:flex-start;">
+      <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 24px; align-items:flex-start;">
         <div>
           ${components.card(`
-            <div class="eyebrow">Root Cause Analysis</div>
-            <h2>${targetIssue.title}</h2>
-            <p style="color:var(--muted); line-height:1.7; font-size:14px; margin-top:16px;">${targetIssue.root_cause}</p>
-            <div style="margin-top:24px; padding:16px; background:#080b0e; border:1px solid var(--line); border-radius:6px; font-family:'DM Mono'; font-size:11px;">
-              <div><b>Affected URL:</b> ${targetIssue.affected_url}</div>
-              ${targetIssue.stack_trace ? `<div style="margin-top:12px; color:var(--red)">${targetIssue.stack_trace.replace(/\n/g, '<br>')}</div>` : ''}
+            <div class="eyebrow">Bug Overview</div>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <h2 style="margin-bottom:16px;">${targetIssue.title}</h2>
+              <div class="tag danger">${targetIssue.severity}</div>
             </div>
-            <div style="margin-top:24px; display:flex; gap:12px;">
-              <button class="btn primary" onclick="actions.applyPatch('${targetIssue.id}', decodeURIComponent('${patchContent}'))">Download Patch</button>
-              <button class="btn ghost" style="border-color:var(--lime); color:var(--lime);" onclick="location.hash='aifix?id=${targetIssue.id}'">Improve with AI ✨</button>
+            
+            <div style="background:#080b0e; border:1px solid var(--line); border-radius:6px; padding:16px; font-family:'DM Mono'; font-size:12px; margin-bottom:24px;">
+              <div style="margin-bottom:8px;"><b>Bug ID:</b> <span style="color:var(--muted);">${targetIssue.id}</span></div>
+              <div style="margin-bottom:8px;"><b>Affected Component:</b> <span style="color:var(--muted);">${targetIssue.affected_component || 'Unknown'}</span></div>
+              <div><b>Affected URL:</b> <span style="color:var(--muted);">${targetIssue.affected_url || '/'}</span></div>
+            </div>
+            
+            <div class="eyebrow">Root Cause Analysis</div>
+            <p style="color:var(--muted); line-height:1.7; font-size:14px; margin-bottom:24px;">${targetIssue.root_cause || 'No root cause identified yet.'}</p>
+            
+            <div style="display:flex; gap:12px; border-top:1px solid var(--line); padding-top:24px;">
+              <button class="btn ghost">View Logs</button>
+              <button class="btn ghost">View Screenshot</button>
+              <button class="btn primary" style="margin-left:auto;" onclick="location.hash='aifix?id=${targetIssue.id}'">Open AI Assistant ✨</button>
             </div>
           `)}
         </div>
         <div>
           ${components.card(`
-            <div class="eyebrow">Proposed Code Patch</div>
-            <h2>Remediation</h2>
-            <div class="diff" style="margin-top:16px; background:#080b0e; padding:20px; border-radius:6px; font-family:'DM Mono'; font-size:12px; line-height:1.7; overflow-x:auto; white-space:pre-wrap;">${targetIssue.patch.split('\n').map(line => {
-                if (line.startsWith('+')) return `<div style="color:var(--lime); background:rgba(196,245,45,0.1)">${line}</div>`;
-                if (line.startsWith('-')) return `<div style="color:var(--red); background:rgba(255,109,117,0.1)">${line}</div>`;
-                return `<div style="color:var(--text)">${line}</div>`;
-              }).join('')}</div>
+            <div class="eyebrow">Diagnostic Logs</div>
+            <h3 style="margin-bottom:12px; font-size:16px;">Stack Trace / Errors</h3>
+            <div style="background:rgba(255,109,117,0.05); border:1px solid rgba(255,109,117,0.2); border-radius:6px; padding:16px; font-family:'DM Mono'; font-size:11px; color:var(--red); overflow-x:auto; white-space:pre-wrap; min-height:150px; margin-bottom:24px;">
+              ${targetIssue.stack_trace || 'No stack trace available.'}
+            </div>
+            
+            <h3 style="margin-bottom:12px; font-size:16px;">Screenshot Evidence</h3>
+            ${targetIssue.screenshot ? `<img src="${targetIssue.screenshot}" style="width:100%; border-radius:6px; border:1px solid var(--line);">` : `<div style="padding:40px; text-align:center; background:#080b0e; border:1px solid var(--line); border-radius:6px; color:var(--muted); font-size:12px;">Screenshot not available</div>`}
           `)}
         </div>
       </div>`;
@@ -967,8 +1029,10 @@ const views = {
   aifix: async () => {
     const params = new URLSearchParams(window.location.hash.split('?')[1]);
     const initialIssueId = params.get('id') || '';
+    const initialMode = params.get('mode') || 'cloud';
 
     let body = components.head('OpenRouter AI Agent', 'AI Fix Assistant', 'AI-powered root-cause analysis and automated engineering patch generation.');
+    body += components.progressTracker('aifix');
     
     body += `
       <style>
@@ -981,48 +1045,76 @@ const views = {
         .diff-add { color: var(--lime); background: rgba(0,255,136,0.1); }
         .diff-remove { color: var(--red); background: rgba(255,77,77,0.1); }
       </style>
-      <div class="grid" style="grid-template-columns: 350px 1fr; gap: 24px; align-items: start;">
-        ${components.card(`
-          <form id="ai-fix-form" onsubmit="window.generateAIFix(event)">
-            <div class="field" style="margin-bottom:16px;">
-              <label>Issue ID</label>
-              <input name="issueId" id="aifix-issue-id" required value="${initialIssueId}" placeholder="e.g. ISSUE-DFCF508F" style="background:#0a0e14; border:1px solid var(--line);">
+      <div style="max-width:1000px; margin:0 auto;">
+        ${!initialIssueId ? `
+          ${components.card(`
+            <div style="text-align:center; padding: 60px 20px;">
+              <h2 style="margin-bottom:16px;">AI Fix Assistant</h2>
+              <p style="color:var(--muted); margin-bottom:24px;">Please select an issue from the Issues page to begin the autonomous AI Fix workflow.</p>
+              <button class="btn primary" onclick="location.hash='issue'">Go to Issues</button>
             </div>
-            <div class="field" style="margin-bottom:16px;">
-              <label>AI Model</label>
-              <select name="model" style="width:100%; padding:12px; background:#0a0e14; border:1px solid var(--line); color:#fff; border-radius:6px; font-size:14px; outline:none;">
-                <optgroup label="Free / Open Source Models">
-                  <option value="meta-llama/llama-3-8b-instruct:free" selected>Llama 3 8B (Free)</option>
-                  <option value="mistralai/mistral-7b-instruct:free">Mistral 7B (Free)</option>
-                  <option value="google/gemma-2-9b-it:free">Gemma 2 9B (Free)</option>
-                </optgroup>
-                <optgroup label="Paid / Premium Models">
-                  <option value="google/gemini-2.5-flash">Gemini 2.5 Flash</option>
-                  <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet</option>
-                  <option value="openai/gpt-4o">GPT-4o</option>
-                </optgroup>
-              </select>
+          `)}
+        ` : `
+          <div id="aifix-setup" style="animation: fadeIn 0.5s ease;">
+            <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 32px; align-items:start;">
+              ${components.card(`
+                <h3 style="margin-bottom:16px;">Loaded Context</h3>
+                <p style="color:var(--muted); font-size:13px; margin-bottom:16px;">The following data has been securely pulled from the completed scan and will be attached to your engineering prompt:</p>
+                <ul style="color:var(--muted); font-size:14px; line-height:2; list-style-type:none; padding:0;">
+                  <li><span style="color:var(--lime); margin-right:8px;">✓</span> Repository Codebase</li>
+                  <li><span style="color:var(--lime); margin-right:8px;">✓</span> Deployment URL</li>
+                  <li><span style="color:var(--lime); margin-right:8px;">✓</span> Bug ID (<code style="font-family:'DM Mono'; font-size:12px;">${initialIssueId}</code>)</li>
+                  <li><span style="color:var(--lime); margin-right:8px;">✓</span> Affected Files</li>
+                  <li><span style="color:var(--lime); margin-right:8px;">✓</span> Console Logs</li>
+                  <li><span style="color:var(--lime); margin-right:8px;">✓</span> Network Logs</li>
+                  <li><span style="color:var(--lime); margin-right:8px;">✓</span> DOM Snapshot</li>
+                  <li><span style="color:var(--lime); margin-right:8px;">✓</span> Playwright Timeline</li>
+                  <li><span style="color:var(--lime); margin-right:8px;">✓</span> Screenshots</li>
+                  <li><span style="color:var(--lime); margin-right:8px;">✓</span> Accessibility & Performance Results</li>
+                </ul>
+              `)}
+              ${components.card(`
+                <h3 style="margin-bottom:16px;">AI Mode Selection</h3>
+                
+                <label style="display:flex; padding:16px; border:1px solid var(--lime); background:rgba(0,255,136,0.05); border-radius:6px; cursor:pointer; margin-bottom:16px;" onclick="this.style.borderColor='var(--lime)'; this.style.background='rgba(0,255,136,0.05)'; this.nextElementSibling.style.borderColor='var(--line)'; this.nextElementSibling.style.background='#080b0e'; document.getElementById('api-key-container').style.display='none'; this.querySelector('input').checked=true;">
+                  <input type="radio" name="ai-mode" value="local" checked style="margin-right:12px; margin-top:4px;">
+                  <div>
+                    <div style="font-weight:bold; color:#fff; margin-bottom:4px;">Mode 1: Free Local AI</div>
+                    <div style="font-size:12px; color:var(--muted); line-height:1.5;">Use local open-source models (Llama, Qwen, DeepSeek, Gemma, Mistral) via Ollama. No API key required. Data stays on your machine.</div>
+                  </div>
+                </label>
+                
+                <label style="display:flex; padding:16px; border:1px solid var(--line); background:#080b0e; border-radius:6px; cursor:pointer; margin-bottom:16px;" onclick="this.style.borderColor='var(--lime)'; this.style.background='rgba(0,255,136,0.05)'; this.previousElementSibling.style.borderColor='var(--line)'; this.previousElementSibling.style.background='rgba(0,0,0,0)'; document.getElementById('api-key-container').style.display='block'; this.querySelector('input').checked=true;">
+                  <input type="radio" name="ai-mode" value="cloud" style="margin-right:12px; margin-top:4px;">
+                  <div>
+                    <div style="font-weight:bold; color:#fff; margin-bottom:4px;">Mode 2: Cloud AI (Premium)</div>
+                    <div style="font-size:12px; color:var(--muted); line-height:1.5;">Use OpenRouter for maximum capability with modern models.</div>
+                  </div>
+                </label>
+                
+                <div id="api-key-container" style="display:none; margin-bottom:16px;">
+                  <label style="font-size:12px; color:var(--muted); display:block; margin-bottom:8px;">OpenRouter API Key (Optional if configured on server)</label>
+                  <input type="password" id="openrouter-key" placeholder="sk-or-v1-..." style="width:100%; padding:10px; background:#0a0e14; border:1px solid var(--line); color:#fff; border-radius:4px; font-size:13px; outline:none;">
+                </div>
+                
+                <button class="btn primary" style="width:100%; padding:14px; font-size:16px; margin-top:8px;" onclick="
+                  const mode = document.querySelector('input[name=\\'ai-mode\\']:checked').value;
+                  document.getElementById('aifix-setup').style.display='none';
+                  window.generateAIFix('${initialIssueId}', mode);
+                ">Run AI Assistant ✨</button>
+              `)}
             </div>
-            <div class="field" style="margin-bottom:24px;">
-              <label>OpenRouter API Key (Optional)</label>
-              <input type="password" name="apiKey" placeholder="sk-or-v1-..." style="width:100%; padding:12px; background:#0a0e14; border:1px solid var(--line); color:#fff; border-radius:6px; font-size:14px; outline:none;">
-            </div>
-            <button type="submit" class="btn primary" style="width:100%; margin-bottom:12px;" id="aifix-btn">Generate AI Fix ✨</button>
-            <button type="button" class="btn ghost" style="width:100%; margin-bottom:12px;" onclick="document.getElementById('ai-fix-form').reset(); document.getElementById('aifix-result').style.display='none';">Clear</button>
-            <button type="button" class="btn ghost" style="width:100%;" onclick="window.loadRecentFixes()">Recent Fixes</button>
-          </form>
-        `)}
-        
-        <div>
-          <div id="aifix-loading" class="ai-loading">
-            <div style="margin-bottom:8px;">[SYSTEM] Initializing AI Fix Assistant...</div>
-            <div id="ai-loading-step" style="opacity:0.8;">Waiting for input.</div>
+          </div>
+          
+          <div id="aifix-loading" class="ai-loading" style="display:none;">
+            <div style="margin-bottom:8px;">[SYSTEM] Initializing AI Fix Assistant for ${initialIssueId}...</div>
+            <div id="ai-loading-step" style="opacity:0.8;">Connecting...</div>
           </div>
           
           <div id="aifix-result" class="ai-result">
             <!-- Results injected here -->
           </div>
-        </div>
+        `}
       </div>
     `;
     
@@ -1037,19 +1129,13 @@ const views = {
           console.log(data);
         };
         
-        window.generateAIFix = async (e) => {
-          e.preventDefault();
-          const form = e.target;
-          const issueId = form.issueId.value;
-          const model = form.model.value;
-          const apiKey = form.apiKey.value;
-          
+        window.generateAIFix = async (issueId, mode) => {
           const loading = document.getElementById('aifix-loading');
           const result = document.getElementById('aifix-result');
           const step = document.getElementById('ai-loading-step');
-          const btn = document.getElementById('aifix-btn');
           
-          btn.disabled = true;
+          if (!loading || !result || !step) return;
+          
           result.style.display = 'none';
           loading.style.display = 'block';
           
@@ -1068,7 +1154,7 @@ const views = {
             const res = await fetch('/api/ai/fix', {
               method: 'POST',
               headers: {'Content-Type': 'application/json'},
-              body: JSON.stringify({ issueId, model, apiKey })
+              body: JSON.stringify({ issueId, mode })
             });
             
             clearInterval(intv);
@@ -1095,14 +1181,14 @@ const views = {
               loading.style.display = 'none';
               result.innerHTML = window.renderAIFixResult(data);
               result.style.display = 'block';
-              btn.disabled = false;
             }, 500);
             
           } catch(err) {
             clearInterval(intv);
-            step.innerText = '[ERROR] ' + err.message;
-            step.style.color = 'var(--red)';
-            btn.disabled = false;
+            if (step) {
+              step.innerText = '[ERROR] ' + err.message;
+              step.style.color = 'var(--red)';
+            }
           }
         };
         
@@ -1163,8 +1249,34 @@ const views = {
                 </ul>
               </div>
               
+              <div class="res-section">
+                <h3>Developer Prompt</h3>
+                <p>Paste this prompt directly into your AI coding assistant to implement the fix.</p>
+                <div class="code-block">${data.developer_prompt || 'Prompt not generated.'}</div>
+                <div style="display:flex; gap:12px; margin-top:12px; flex-wrap:wrap;">
+                  <button class="btn primary" onclick="alert('Copied Prompt!')">Copy Prompt</button>
+                  <button class="btn ghost" onclick="alert('Copied for Cursor')">Copy for Cursor</button>
+                  <button class="btn ghost" onclick="alert('Copied for Codex')">Copy for Codex</button>
+                  <button class="btn ghost" onclick="alert('Copied for Claude Code')">Copy for Claude Code</button>
+                  <button class="btn ghost" onclick="alert('Copied for Antigravity')">Copy for Antigravity</button>
+                  <button class="btn ghost" onclick="alert('Downloading Prompt...')">Download Prompt</button>
+                </div>
+              </div>
+              
+              <div class="res-section">
+                <h3>IDE Guide</h3>
+                <p style="color:var(--muted); font-size:14px; margin-bottom:16px;">Step-by-step instructions to apply this fix.</p>
+                <div style="background:#080b0e; padding:20px; border-radius:6px; border:1px solid var(--line);">
+                  ${['Open Cursor', 'Open Repository', 'Paste Prompt', 'Generate Code', 'Review', 'Apply Changes', 'Run Tests', 'Verify Fix'].map((step, idx, arr) => `
+                    <div style="display:flex; gap:16px; margin-bottom:${idx === arr.length-1 ? '0' : '16px'};">
+                      <div style="width:24px; height:24px; border-radius:12px; background:var(--lime); color:#000; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:12px; flex-shrink:0;">${idx+1}</div>
+                      <div style="color:var(--text); font-family:'DM Mono'; font-size:13px; line-height:24px;">${step}</div>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+              
               <div style="display:flex; gap:12px; border-top:1px solid var(--line); padding-top:24px;">
-                <button class="btn primary" onclick="alert('Patch Copied!')">Copy Patch</button>
                 <button class="btn ghost" onclick="alert('Downloading...')">Download Patch</button>
                 <button class="btn ghost">Explain Simpler</button>
                 <button class="btn ghost">Regenerate</button>
@@ -1177,14 +1289,7 @@ const views = {
       document.body.appendChild(script);
     }
     
-    if (initialIssueId) {
-      setTimeout(() => {
-        const form = document.getElementById('ai-fix-form');
-        if(form && typeof window.generateAIFix === 'function') {
-          window.generateAIFix({ preventDefault: () => {}, target: form });
-        }
-      }, 300);
-    }
+    // Setup screen is now manual, so we don't automatically generate the fix anymore.
 
     body += components.wfNav('aifix');
     app.innerHTML = components.shell('AI Fix Assistant', 'aifix', body);

@@ -119,8 +119,8 @@ app.get('/api/evals', async (req, res) => {
 });
 
 app.post('/api/ai/fix', async (req, res) => {
-  const { issueId, model, apiKey } = req.body;
-  console.log(`\n[AI Fix Assistant] Incoming request - Issue: ${issueId}, Model: ${model}`);
+  const { issueId, mode } = req.body;
+  console.log(`\n[AI Fix Assistant] Incoming request - Issue: ${issueId}, Mode: ${mode}`);
   
   const db = getDb();
   
@@ -150,7 +150,17 @@ Return a JSON object EXACTLY matching this structure:
   "regression_tests": ["Test 1"],
   "confidence_score": 95,
   "risk_assessment": "Low/Med/High risk with reason",
-  "next_actions": ["Action 1"]
+  "next_actions": ["Action 1"],
+  "developer_prompt": "Issue Summary: ... \\n Affected Files: ... \\n Logs: ... \\n Stack Trace: ... \\n Expected Behaviour: ... \\n Acceptance Criteria: ...",
+  "ide_guide": [
+    "Step 1: Open checkout/Confirmation.tsx",
+    "Step 2: Locate confirmOrder()",
+    "Step 3: Replace old code with new code",
+    "Step 4: Save File",
+    "Step 5: Run npm test",
+    "Step 6: Run npm run dev",
+    "Step 7: Verify checkout succeeds"
+  ]
 }
 
 Issue Context:
@@ -165,28 +175,50 @@ Stack Trace:
 ${issue.stack_trace || 'None'}
 `;
 
-    console.log(`[AI Fix Assistant] Outgoing OpenRouter request...`);
-    const openRouterRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey || process.env.OPENROUTER_API_KEY || ''}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: model || 'google/gemini-2.5-flash',
-        messages: [{ role: 'user', content: prompt }],
-        response_format: { type: 'json_object' }
-      })
-    });
+    console.log(`[AI Fix Assistant] Outgoing ${mode === 'local' ? 'Ollama' : 'OpenRouter'} request...`);
+    let aiData;
+    
+    if (mode === 'local') {
+      const ollamaRes = await fetch('http://localhost:11434/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'llama3',
+          prompt: prompt,
+          format: 'json',
+          stream: false
+        })
+      });
+      if (!ollamaRes.ok) {
+        const errText = await ollamaRes.text();
+        console.error(`[AI Fix Assistant] Ollama API Error (${ollamaRes.status}):`, errText);
+        throw new Error(`Ollama API Error: ${ollamaRes.status}. Make sure Ollama is running locally.`);
+      }
+      const rawData = await ollamaRes.json();
+      aiData = { choices: [{ message: { content: rawData.response } }] };
+    } else {
+      const openRouterRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY || ''}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash',
+          messages: [{ role: 'user', content: prompt }],
+          response_format: { type: 'json_object' }
+        })
+      });
 
-    if (!openRouterRes.ok) {
-      const errText = await openRouterRes.text();
-      console.error(`[AI Fix Assistant] OpenRouter API Error (${openRouterRes.status}):`, errText);
-      throw new Error(`OpenRouter API Error: ${openRouterRes.status}`);
+      if (!openRouterRes.ok) {
+        const errText = await openRouterRes.text();
+        console.error(`[AI Fix Assistant] OpenRouter API Error (${openRouterRes.status}):`, errText);
+        throw new Error(`OpenRouter API Error: ${openRouterRes.status}`);
+      }
+      aiData = await openRouterRes.json();
     }
 
-    const aiData = await openRouterRes.json();
-    console.log(`[AI Fix Assistant] OpenRouter response received successfully.`);
+    console.log(`[AI Fix Assistant] AI response received successfully.`);
     let parsedResponse = {};
     try {
       parsedResponse = JSON.parse(aiData.choices[0].message.content);
@@ -198,7 +230,7 @@ ${issue.stack_trace || 'None'}
     const fixId = `FIX-${randomUUID().split('-')[0].toUpperCase()}`;
     await db.run(
       `INSERT INTO ai_fix_requests (id, issue_id, scan_id, model, response_json, execution_time) VALUES (?, ?, ?, ?, ?, ?)`,
-      [fixId, issueId, scan?.id, model || 'google/gemini-2.5-flash', JSON.stringify(parsedResponse), 1200]
+      [fixId, issueId, scan?.id, mode === 'local' ? 'ollama/llama3' : 'google/gemini-2.5-flash', JSON.stringify(parsedResponse), 1200]
     );
 
     console.log(`[AI Fix Assistant] Final JSON response generated & saved to database.`);
