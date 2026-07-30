@@ -20,8 +20,18 @@ const getLatestScanId = async (db) => {
   return scan ? scan.id : null;
 };
 
+// Global error handler wrapper for async routes
+const asyncHandler = (fn) => (req, res, next) => {
+  Promise.resolve(fn(req, res, next)).catch((err) => {
+    console.error(JSON.stringify({ endpoint: req.originalUrl, method: req.method, error: err.message, stack: err.stack }));
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message, stack: process.env.NODE_ENV === 'development' ? err.stack : undefined });
+    }
+  });
+};
+
 // API Routes
-app.post('/api/login', async (req, res) => {
+app.post('/api/login', asyncHandler(async (req, res) => {
   const { name, email } = req.body;
   const db = getDb();
   let user = await db.get(`SELECT * FROM users WHERE email = ?`, [email]);
@@ -30,9 +40,9 @@ app.post('/api/login', async (req, res) => {
     user = { id: result.lastID, name, email };
   }
   res.json({ user });
-});
+}));
 
-app.get('/api/dashboard', async (req, res) => {
+app.get('/api/dashboard', asyncHandler(async (req, res) => {
   const db = getDb();
   const latestScan = await db.get(`SELECT * FROM scans ORDER BY created_at DESC LIMIT 1`);
   if (!latestScan) return res.json({ hasScan: false });
@@ -49,9 +59,9 @@ app.get('/api/dashboard', async (req, res) => {
     latestScanName: latestScan.name,
     latestScanStatus: latestScan.status
   });
-});
+}));
 
-app.post('/api/scans', async (req, res) => {
+app.post('/api/scans', asyncHandler(async (req, res) => {
   const { name, repoUrl, deployUrl } = req.body;
   const id = `scan-${randomUUID().split('-')[0]}`;
   const db = getDb();
@@ -61,15 +71,15 @@ app.post('/api/scans', async (req, res) => {
   );
   runScan(id, repoUrl, deployUrl);
   res.status(201).json({ id, name, status: 'running' });
-});
+}));
 
-app.get('/api/scans', async (req, res) => {
+app.get('/api/scans', asyncHandler(async (req, res) => {
   const db = getDb();
   const scans = await db.all(`SELECT * FROM scans ORDER BY created_at DESC LIMIT 10`);
   res.json(scans);
-});
+}));
 
-app.get('/api/scans/:id/stream', async (req, res) => {
+app.get('/api/scans/:id/stream', asyncHandler(async (req, res) => {
   const { id } = req.params;
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -89,35 +99,35 @@ app.get('/api/scans/:id/stream', async (req, res) => {
   };
   scanEmitter.on(`scan:${id}`, listener);
   req.on('close', () => scanEmitter.removeListener(`scan:${id}`, listener));
-});
+}));
 
-app.get('/api/issues', async (req, res) => {
+app.get('/api/issues', asyncHandler(async (req, res) => {
   const db = getDb();
   const sid = await getLatestScanId(db);
   const issues = await db.all(`SELECT * FROM issues WHERE scan_id = ? ORDER BY created_at DESC`, [sid]);
   res.json(issues);
-});
+}));
 
-app.get('/api/flows', async (req, res) => {
+app.get('/api/flows', asyncHandler(async (req, res) => {
   const db = getDb();
   const sid = await getLatestScanId(db);
   const flows = await db.all(`SELECT * FROM flows WHERE scan_id = ?`, [sid]);
   res.json(flows);
-});
+}));
 
-app.get('/api/nodes', async (req, res) => {
+app.get('/api/nodes', asyncHandler(async (req, res) => {
   const db = getDb();
   const sid = await getLatestScanId(db);
   const nodes = await db.all(`SELECT * FROM nodes WHERE scan_id = ?`, [sid]);
   res.json(nodes);
-});
+}));
 
-app.get('/api/evals', async (req, res) => {
+app.get('/api/evals', asyncHandler(async (req, res) => {
   const db = getDb();
   const sid = await getLatestScanId(db);
   const evals = await db.all(`SELECT * FROM evals WHERE scan_id = ?`, [sid]);
   res.json(evals);
-});
+}));
 
 app.post('/api/ai/fix', async (req, res) => {
   const { issueId, mode, model, apiKey } = req.body;
@@ -298,11 +308,11 @@ ${issue.stack_trace || 'None'}
   }
 });
 
-app.get('/api/ai/fix/recent', async (req, res) => {
+app.get('/api/ai/fix/recent', asyncHandler(async (req, res) => {
   const db = getDb();
   const fixes = await db.all(`SELECT * FROM ai_fix_requests ORDER BY created_at DESC LIMIT 5`);
   res.json(fixes);
-});
+}));
 
 // Ensure any unknown /api route returns JSON, preventing HTML fallback
 app.use('/api', (req, res) => {
@@ -313,6 +323,12 @@ app.use(express.static(__dirname));
 app.use((req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
 initDb().then(() => {
-  const port = process.env.PORT || 3000;
-  app.listen(port, () => console.log(`LaunchGuard AI backend running on http://localhost:${port}`));
-}).catch(console.error);
+  if (!process.env.VERCEL) {
+    const port = process.env.PORT || 3000;
+    app.listen(port, () => console.log(`LaunchGuard AI backend running on http://localhost:${port}`));
+  }
+}).catch(err => {
+  console.error("Database initialization failed:", err);
+});
+
+export default app;

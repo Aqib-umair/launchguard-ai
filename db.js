@@ -8,8 +8,15 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let db;
 
 export async function initDb() {
+  const isVercel = !!process.env.VERCEL;
+  const dbPath = isVercel 
+    ? path.join('/tmp', 'launchguard.db') 
+    : path.join(__dirname, 'launchguard.db');
+    
+  console.log(`[DB] Initializing SQLite database at: ${dbPath}`);
+  
   db = await open({
-    filename: path.join(__dirname, 'launchguard.db'),
+    filename: dbPath,
     driver: sqlite3.Database
   });
 
