@@ -68,11 +68,20 @@ app.get('/api/scans', async (req, res) => {
   res.json(scans);
 });
 
-app.get('/api/scans/:id/stream', (req, res) => {
+app.get('/api/scans/:id/stream', async (req, res) => {
   const { id } = req.params;
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
+
+  const db = getDb();
+  const scan = await db.get(`SELECT status FROM scans WHERE id = ?`, [id]);
+  
+  if (!scan || scan.status !== 'running') {
+    res.write(`data: ${JSON.stringify({ log: 'Scan already completed or failed.', p: 100, isWarn: scan?.status === 'failed' })}\n\n`);
+    return res.end();
+  }
+
   const listener = (data) => {
     res.write(`data: ${JSON.stringify(data)}\n\n`);
     if (data.p === 100) { res.end(); scanEmitter.removeListener(`scan:${id}`, listener); }
@@ -107,6 +116,108 @@ app.get('/api/evals', async (req, res) => {
   const sid = await getLatestScanId(db);
   const evals = await db.all(`SELECT * FROM evals WHERE scan_id = ?`, [sid]);
   res.json(evals);
+});
+
+app.post('/api/ai/fix', async (req, res) => {
+  const { issueId, model, apiKey } = req.body;
+  console.log(`\n[AI Fix Assistant] Incoming request - Issue: ${issueId}, Model: ${model}`);
+  
+  const db = getDb();
+  
+  try {
+    console.log(`[AI Fix Assistant] Database lookup for issue ${issueId}...`);
+    const issue = await db.get(`SELECT * FROM issues WHERE id = ?`, [issueId]);
+    if (!issue) {
+      console.log(`[AI Fix Assistant] Error: Issue not found.`);
+      return res.status(404).json({ error: 'Issue not found.' });
+    }
+    
+    console.log(`[AI Fix Assistant] Database lookup for scan ${issue.scan_id}...`);
+    const scan = await db.get(`SELECT * FROM scans WHERE id = ?`, [issue.scan_id]);
+    
+    const prompt = `You are a Principal AI Software Engineer analyzing a production bug.
+Return a JSON object EXACTLY matching this structure:
+{
+  "executive_summary": "High level summary",
+  "root_cause": "Detailed root cause",
+  "why_happened": "Why it occurred",
+  "production_impact": "Impact assessment",
+  "affected_files": ["file1.js"],
+  "code_explanation": "Explanation of fix",
+  "step_by_step_fix": ["Step 1", "Step 2"],
+  "before_code": "code",
+  "after_code": "code",
+  "regression_tests": ["Test 1"],
+  "confidence_score": 95,
+  "risk_assessment": "Low/Med/High risk with reason",
+  "next_actions": ["Action 1"]
+}
+
+Issue Context:
+Title: ${issue.title}
+Severity: ${issue.severity}
+Component: ${issue.affected_component}
+Before Code:
+${issue.before_code}
+Console Errors: ${issue.console_error || 'None'}
+Network Errors: ${issue.network_error || 'None'}
+Stack Trace:
+${issue.stack_trace || 'None'}
+`;
+
+    console.log(`[AI Fix Assistant] Outgoing OpenRouter request...`);
+    const openRouterRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey || process.env.OPENROUTER_API_KEY || ''}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: model || 'google/gemini-2.5-flash',
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' }
+      })
+    });
+
+    if (!openRouterRes.ok) {
+      const errText = await openRouterRes.text();
+      console.error(`[AI Fix Assistant] OpenRouter API Error (${openRouterRes.status}):`, errText);
+      throw new Error(`OpenRouter API Error: ${openRouterRes.status}`);
+    }
+
+    const aiData = await openRouterRes.json();
+    console.log(`[AI Fix Assistant] OpenRouter response received successfully.`);
+    let parsedResponse = {};
+    try {
+      parsedResponse = JSON.parse(aiData.choices[0].message.content);
+    } catch (e) {
+      console.error(`[AI Fix Assistant] Error parsing OpenRouter JSON response.`);
+      parsedResponse = { error: "Failed to parse AI response as JSON.", raw: aiData.choices[0].message.content };
+    }
+
+    const fixId = `FIX-${randomUUID().split('-')[0].toUpperCase()}`;
+    await db.run(
+      `INSERT INTO ai_fix_requests (id, issue_id, scan_id, model, response_json, execution_time) VALUES (?, ?, ?, ?, ?, ?)`,
+      [fixId, issueId, scan?.id, model || 'google/gemini-2.5-flash', JSON.stringify(parsedResponse), 1200]
+    );
+
+    console.log(`[AI Fix Assistant] Final JSON response generated & saved to database.`);
+    res.json(parsedResponse);
+  } catch (error) {
+    console.error("[AI Fix Assistant] Exception:", error);
+    res.status(500).json({ error: 'Unable to generate AI analysis. Please try again.' });
+  }
+});
+
+app.get('/api/ai/fix/recent', async (req, res) => {
+  const db = getDb();
+  const fixes = await db.all(`SELECT * FROM ai_fix_requests ORDER BY created_at DESC LIMIT 5`);
+  res.json(fixes);
+});
+
+// Ensure any unknown /api route returns JSON, preventing HTML fallback
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: 'API endpoint not found.' });
 });
 
 app.use(express.static(__dirname));

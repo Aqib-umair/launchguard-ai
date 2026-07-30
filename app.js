@@ -21,14 +21,15 @@ const navItems = [
   ['setup','＋','New scan'],
   ['progress','◉','Live scans'],
   ['replay','↝','Broken flows'],
-  ['shader','✦','Shader'],
+  ['shader','✦','Journey Map'],
   ['eval','⌁','Eval builder'],
   ['issue','!','Issues'],
   ['fix','⌁','AI fix plans'],
+  ['aifix','✧','AI Fix Assistant'],
   ['share','↗','Public share']
 ];
 
-const wfOrder = ['report', 'replay', 'shader', 'eval', 'issue', 'fix', 'share'];
+const wfOrder = ['report', 'replay', 'shader', 'eval', 'issue', 'fix', 'aifix', 'share'];
 
 // Components
 const components = {
@@ -154,125 +155,249 @@ const views = {
   landing: () => {
     app.innerHTML = `<div class="app"><main class="main" style="border-left:0; background: #000; color: #fff;">
       <style>
-        .premium-landing { font-family: 'Inter', sans-serif; overflow-x: hidden; }
-        .p-topbar { display: flex; justify-content: space-between; align-items: center; padding: 20px 60px; position: fixed; top: 0; left: 0; right: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(12px); z-index: 1000; border-bottom: 1px solid rgba(255,255,255,0.05); }
-        .p-hero { padding: 180px 20px 100px; text-align: center; max-width: 1000px; margin: 0 auto; }
-        .p-hero h1 { font-size: 72px; letter-spacing: -3px; line-height: 1.1; margin-bottom: 24px; font-weight: 600; background: linear-gradient(to bottom right, #fff, #888); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-        .p-hero p { font-size: 20px; color: #a0a0a0; max-width: 700px; margin: 0 auto 40px; line-height: 1.6; }
-        .p-hero .actions { display: flex; gap: 16px; justify-content: center; }
+        .premium-landing { font-family: 'Inter', sans-serif; overflow-x: hidden; background: #000; }
+        .p-topbar { display: flex; justify-content: space-between; align-items: center; padding: 20px 60px; position: fixed; top: 0; left: 0; right: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(16px); z-index: 1000; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .p-topbar .brand .mark { width: 32px; height: 32px; background: #fff; color: #000; display: grid; place-items: center; border-radius: 8px; font-weight: 700; margin-right: 12px; }
+        .p-topbar .brand { display: flex; align-items: center; font-weight: 600; font-size: 18px; letter-spacing: -0.5px; }
         
-        .p-section { padding: 120px 20px; max-width: 1200px; margin: 0 auto; border-top: 1px solid rgba(255,255,255,0.05); }
-        .p-section-title { font-size: 40px; letter-spacing: -1.5px; margin-bottom: 60px; text-align: center; }
+        .p-hero { position: relative; padding: 180px 20px 120px; max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; text-align: center; }
+        .p-hero h1 { font-size: 84px; letter-spacing: -4px; line-height: 1; margin-bottom: 24px; font-weight: 700; background: linear-gradient(135deg, #fff 30%, #888); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .p-hero p { font-size: 22px; color: #a0a0a0; max-width: 750px; line-height: 1.5; margin-bottom: 48px; }
         
-        .vs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
-        .vs-col { padding: 40px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05); background: rgba(255,255,255,0.02); }
-        .vs-col h3 { font-size: 24px; margin-bottom: 32px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 16px; }
-        .vs-item { display: flex; align-items: center; margin-bottom: 20px; font-size: 16px; color: #a0a0a0; }
-        .vs-item.red i { color: #ff4d4d; background: rgba(255,77,77,0.1); }
-        .vs-item.green i { color: #00ff88; background: rgba(0,255,136,0.1); }
-        .vs-item i { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; margin-right: 16px; font-style: normal; font-weight: bold; }
+        .hero-actions { display: flex; gap: 20px; justify-content: center; z-index: 10; position: relative; }
+        .btn-premium { background: #fff; color: #000; padding: 18px 36px; border-radius: 50px; font-weight: 600; font-size: 16px; border: none; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; box-shadow: 0 0 30px rgba(255,255,255,0.2); }
+        .btn-premium:hover { transform: translateY(-2px); box-shadow: 0 0 40px rgba(255,255,255,0.4); }
+        .btn-ghost-premium { background: transparent; color: #fff; padding: 18px 36px; border-radius: 50px; font-weight: 600; font-size: 16px; border: 1px solid rgba(255,255,255,0.2); cursor: pointer; transition: background 0.2s, border-color 0.2s; }
+        .btn-ghost-premium:hover { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.4); }
         
-        .workflow-timeline { max-width: 600px; margin: 0 auto; position: relative; }
-        .workflow-timeline::before { content: ''; position: absolute; left: 24px; top: 0; bottom: 0; width: 2px; background: linear-gradient(to bottom, #333, #111); }
-        .step { display: flex; align-items: center; margin-bottom: 40px; position: relative; opacity: 0; transform: translateY(20px); animation: fadeUp 0.8s forwards; }
-        .step:nth-child(1) { animation-delay: 0.1s; } .step:nth-child(2) { animation-delay: 0.3s; } .step:nth-child(3) { animation-delay: 0.5s; } .step:nth-child(4) { animation-delay: 0.7s; } .step:nth-child(5) { animation-delay: 0.9s; } .step:nth-child(6) { animation-delay: 1.1s; } .step:nth-child(7) { animation-delay: 1.3s; } .step:nth-child(8) { animation-delay: 1.5s; }
-        .step-num { width: 50px; height: 50px; background: #000; border: 2px solid #333; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-family: 'DM Mono'; margin-right: 24px; z-index: 2; color: #fff; }
-        .step-content { background: rgba(255,255,255,0.03); padding: 24px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); flex-grow: 1; font-size: 18px; }
+        /* Slider Section */
+        .slider-section { position: relative; max-width: 1200px; margin: 80px auto; padding: 0 20px; }
+        .compare-container { position: relative; height: 600px; background: #080b0e; border-radius: 24px; border: 1px solid rgba(255,255,255,0.1); overflow: hidden; box-shadow: 0 40px 100px rgba(0,0,0,0.8); }
         
-        .feat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
-        .feat-card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 32px; border-radius: 12px; transition: transform 0.2s, background 0.2s; }
-        .feat-card:hover { transform: translateY(-5px); background: rgba(255,255,255,0.04); }
-        .feat-card h4 { font-size: 20px; margin-bottom: 12px; }
-        .feat-card p { color: #888; font-size: 15px; line-height: 1.5; }
+        .compare-pane { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; padding: 60px; }
+        .compare-pane.before { background: radial-gradient(circle at 0% 50%, rgba(255,77,77,0.1) 0, #080b0e 60%); }
+        .compare-pane.after { background: radial-gradient(circle at 100% 50%, rgba(0,255,136,0.15) 0, #0a0e12 80%); clip-path: polygon(50% 0, 100% 0, 100% 100%, 50% 100%); z-index: 2; border-left: 2px solid rgba(0,255,136,0.5); box-shadow: -20px 0 50px rgba(0,0,0,0.5); }
         
-        .proof-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px; text-align: center; }
-        .proof-stat { font-size: 64px; font-weight: 700; letter-spacing: -2px; margin-bottom: 8px; background: linear-gradient(to right, #00ff88, #00b8ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .slider-handle { position: absolute; left: 50%; top: 0; bottom: 0; width: 4px; background: rgba(255,255,255,0.2); z-index: 10; cursor: ew-resize; transform: translateX(-50%); display: flex; align-items: center; justify-content: center; }
+        .slider-knob { width: 48px; height: 48px; background: #fff; border-radius: 50%; display: grid; place-items: center; box-shadow: 0 0 30px rgba(0,0,0,0.5); color: #000; font-weight: bold; pointer-events: none; transition: transform 0.2s; }
+        .slider-handle:hover .slider-knob { transform: scale(1.1); }
         
-        .cta-section { text-align: center; padding: 160px 20px; background: radial-gradient(circle at center, rgba(0,255,136,0.1) 0, #000 50%); }
-        .cta-section h2 { font-size: 56px; letter-spacing: -2px; margin-bottom: 40px; }
+        .compare-title { font-size: 32px; font-weight: 700; margin-bottom: 40px; letter-spacing: -1px; }
+        .compare-pane.before .compare-title { color: #ff4d4d; }
+        .compare-pane.after .compare-title { color: #00ff88; text-align: right; }
         
-        @keyframes fadeUp { to { opacity: 1; transform: translateY(0); } }
+        .compare-grid { display: grid; gap: 20px; max-width: 450px; }
+        .compare-pane.after .compare-grid { margin-left: auto; }
+        
+        .c-card { padding: 24px; border-radius: 12px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; gap: 16px; font-size: 16px; font-weight: 500; transition: transform 0.3s; }
+        .compare-pane.before .c-card { border-color: rgba(255,77,77,0.1); }
+        .compare-pane.after .c-card { border-color: rgba(0,255,136,0.2); background: rgba(0,255,136,0.02); }
+        
+        .c-card i { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 8px; font-style: normal; font-size: 14px; }
+        .compare-pane.before .c-card i { background: rgba(255,77,77,0.1); color: #ff4d4d; }
+        .compare-pane.after .c-card i { background: rgba(0,255,136,0.1); color: #00ff88; }
+        
+        /* 3D Visualizations */
+        .visual-scene { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
+        .v-item { position: absolute; padding: 20px; background: rgba(13,17,23,0.9); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; box-shadow: 0 20px 40px rgba(0,0,0,0.6); backdrop-filter: blur(10px); animation: float 6s ease-in-out infinite; font-family: 'DM Mono', monospace; display: flex; align-items: center; gap: 16px; transition: opacity 0.5s; }
+        .v-item.red { border-color: rgba(255,77,77,0.3); color: #ff4d4d; }
+        .v-item.green { border-color: rgba(0,255,136,0.3); color: #00ff88; }
+        .v-item b { font-size: 24px; color: #fff; }
+        .v-item span { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: #888; }
+        
+        @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-20px); } }
+        
+        /* Scroll Reveal */
+        .reveal { opacity: 0; transform: translateY(40px); transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1); }
+        .reveal.active { opacity: 1; transform: translateY(0); }
+        
+        /* Section styling */
+        .feature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; max-width: 1200px; margin: 120px auto; padding: 0 20px; }
+        .f-card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 40px; border-radius: 20px; transition: background 0.3s, transform 0.3s; }
+        .f-card:hover { background: rgba(255,255,255,0.04); transform: translateY(-5px); border-color: rgba(255,255,255,0.1); }
+        .f-card h3 { font-size: 24px; margin-bottom: 16px; letter-spacing: -0.5px; }
+        .f-card p { color: #888; line-height: 1.6; font-size: 16px; }
+        
+        .cta-bottom { text-align: center; padding: 180px 20px; background: radial-gradient(circle at center, rgba(0,255,136,0.05) 0, transparent 60%); }
+        .cta-bottom h2 { font-size: 64px; letter-spacing: -3px; margin-bottom: 40px; }
       </style>
+
       <div class="premium-landing">
         <header class="p-topbar">
-          <div class="brand"><div class="mark" style="background:#fff; color:#000;">L</div><span style="font-weight:600;">launchguard</span></div>
+          <div class="brand"><div class="mark">L</div><span>launchguard</span></div>
           <div>
-            <button class="btn ghost" style="color:#fff;" onclick="location.hash='login'">Log in</button>
-            <button class="btn primary" style="background:#fff; color:#000;" onclick="location.hash='register'">Sign up</button>
+            <button class="btn ghost" style="color:#fff; margin-right:12px; border:none;" onclick="location.hash='login'">Log in</button>
+            <button class="btn-premium" style="padding:10px 24px; font-size:14px;" onclick="location.hash='register'">Sign up</button>
           </div>
         </header>
         
-        <section class="p-hero">
-          <h1>Your AI Reliability<br>Engineer</h1>
-          <p>Automatically test your deployed application, discover broken user journeys, analyze failures with AI, and generate fixes before your users find the bugs.</p>
-          <div class="actions">
-            <button class="btn primary" style="background:#fff; color:#000; padding:16px 32px; font-size:16px;" onclick="location.hash='register'">Get Started</button>
-            <button class="btn ghost" style="border:1px solid rgba(255,255,255,0.2); padding:16px 32px; font-size:16px;">Watch Demo</button>
+        <section class="p-hero reveal">
+          <h1>Stop Shipping Bugs.<br>Ship With Confidence.</h1>
+          <p>LaunchGuard AI explores your deployed applications, detects broken user journeys, explains failures with AI, and generates production-ready fixes before users encounter them.</p>
+          <div class="hero-actions">
+            <button class="btn-premium" onclick="location.hash='register'">Get Started</button>
+            <button class="btn-ghost-premium">Watch Demo</button>
           </div>
         </section>
-        
-        <section class="p-section">
-          <h2 class="p-section-title">The old way vs. The LaunchGuard way</h2>
-          <div class="vs-grid">
-            <div class="vs-col">
-              <h3>Traditional QA</h3>
-              <div class="vs-item red"><i>✕</i> Manual testing</div>
-              <div class="vs-item red"><i>✕</i> Missed edge-case bugs</div>
-              <div class="vs-item red"><i>✕</i> Slow debugging cycles</div>
-              <div class="vs-item red"><i>✕</i> Repeated regression testing</div>
-              <div class="vs-item red"><i>✕</i> Difficult collaboration</div>
+
+        <section class="slider-section reveal">
+          <div class="compare-container" id="compareContainer">
+            <!-- Left Pane: Before (Red) -->
+            <div class="compare-pane before">
+              <h2 class="compare-title">Traditional QA</h2>
+              <div class="compare-grid">
+                <div class="c-card"><i>✕</i> <span>Manual testing bottlenecks</span></div>
+                <div class="c-card"><i>✕</i> <span>Missed edge-case bugs</span></div>
+                <div class="c-card"><i>✕</i> <span>Long debugging cycles</span></div>
+                <div class="c-card"><i>✕</i> <span>Production failures</span></div>
+              </div>
             </div>
-            <div class="vs-col" style="border-color: rgba(0,255,136,0.3); background: rgba(0,255,136,0.02);">
-              <h3 style="color:#00ff88; border-color: rgba(0,255,136,0.2);">LaunchGuard AI</h3>
-              <div class="vs-item green"><i>✓</i> Autonomous browser testing</div>
-              <div class="vs-item green"><i>✓</i> AI root cause analysis</div>
-              <div class="vs-item green"><i>✓</i> Broken flow detection</div>
-              <div class="vs-item green"><i>✓</i> AI generated code fixes</div>
-              <div class="vs-item green"><i>✓</i> Instantly shareable reports</div>
+            
+            <!-- Right Pane: After (Green) -->
+            <div class="compare-pane after" id="compareAfter">
+              <h2 class="compare-title">LaunchGuard AI</h2>
+              <div class="compare-grid">
+                <div class="c-card"><i>✓</i> <span>Autonomous browser testing</span></div>
+                <div class="c-card"><i>✓</i> <span>AI root-cause analysis</span></div>
+                <div class="c-card"><i>✓</i> <span>Broken flow detection</span></div>
+                <div class="c-card"><i>✓</i> <span>AI-generated patches</span></div>
+              </div>
+            </div>
+            
+            <div class="slider-handle" id="sliderHandle">
+              <div class="slider-knob">↔</div>
+            </div>
+            
+            <!-- 3D Visual Floating Elements -->
+            <div class="visual-scene" id="visualScene">
+              <div class="v-item red" style="top: 10%; left: -50px; animation-delay: 0s;" id="v-red-1">
+                <div style="font-size:24px;">🚨</div><div><span>Issues Found</span><br><b>12</b></div>
+              </div>
+              <div class="v-item red" style="bottom: 15%; left: 10%; animation-delay: 1.5s;" id="v-red-2">
+                <div style="font-size:24px;">📉</div><div><span>Reliability</span><br><b>78%</b></div>
+              </div>
+              <div class="v-item green" style="top: 15%; right: 10%; animation-delay: 0.5s; opacity:0;" id="v-green-1">
+                <div style="font-size:24px;">✨</div><div><span>AI Fix Generated</span><br><b>.patch ready</b></div>
+              </div>
+              <div class="v-item green" style="bottom: 20%; right: -30px; animation-delay: 2s; opacity:0;" id="v-green-2">
+                <div style="font-size:24px;">🚀</div><div><span>Performance</span><br><b>91</b></div>
+              </div>
             </div>
           </div>
         </section>
-        
-        <section class="p-section">
-          <h2 class="p-section-title">How it works</h2>
-          <div class="workflow-timeline">
-            <div class="step"><div class="step-num">1</div><div class="step-content">Paste GitHub Repository</div></div>
-            <div class="step"><div class="step-num">2</div><div class="step-content">Paste Deployment URL</div></div>
-            <div class="step"><div class="step-num">3</div><div class="step-content" style="border-color:#00b8ff; color:#00b8ff;">Playwright explores the application</div></div>
-            <div class="step"><div class="step-num">4</div><div class="step-content">AI analyzes failures</div></div>
-            <div class="step"><div class="step-num">5</div><div class="step-content" style="border-color:#ff4d4d; color:#ff4d4d;">Broken flows detected</div></div>
-            <div class="step"><div class="step-num">6</div><div class="step-content">Issues generated</div></div>
-            <div class="step"><div class="step-num">7</div><div class="step-content" style="border-color:#00ff88; color:#00ff88;">AI Fix Plans generated</div></div>
-            <div class="step"><div class="step-num">8</div><div class="step-content">Share report with your team</div></div>
+
+        <section class="feature-grid">
+          <div class="f-card reveal">
+            <h3>Autonomous Testing</h3>
+            <p>Spins up Playwright engines automatically to crawl and test your deployment without you writing a single line of test code.</p>
+          </div>
+          <div class="f-card reveal">
+            <h3>Flow Intelligence</h3>
+            <p>Visual node mapping of every discovered route, identifying healthy paths and pinpointing exact failure locations.</p>
+          </div>
+          <div class="f-card reveal">
+            <h3>Root Cause Analysis</h3>
+            <p>When an error happens, AI reads the DOM snapshot, console logs, and network trace to tell you exactly why.</p>
+          </div>
+          <div class="f-card reveal">
+            <h3>Issue Tracker</h3>
+            <p>A built-in dashboard prioritizing failures by severity and impact on the user journey.</p>
+          </div>
+          <div class="f-card reveal">
+            <h3>AI Fix Plans</h3>
+            <p>Don't just find bugs. Download complete <code>.patch</code> files generated by AI to immediately remediate issues.</p>
+          </div>
+          <div class="f-card reveal">
+            <h3>Instantly Shareable</h3>
+            <p>Generate public, shareable reliability audit reports to keep your team and stakeholders aligned on quality.</p>
           </div>
         </section>
-        
-        <section class="p-section">
-          <h2 class="p-section-title">Everything you need to ship safely</h2>
-          <div class="feat-grid">
-            <div class="feat-card"><h4>Autonomous Browser Testing</h4><p>LaunchGuard spins up Playwright engines to automatically crawl and test your deployment without writing a single test.</p></div>
-            <div class="feat-card"><h4>Flow Intelligence</h4><p>Visual node mapping of every discovered route, identifying healthy paths and pinpointing exact failure locations.</p></div>
-            <div class="feat-card"><h4>AI Root Cause Analysis</h4><p>When an error happens, AI reads the DOM snapshot, console logs, and network trace to tell you exactly why.</p></div>
-            <div class="feat-card"><h4>Issue Tracker</h4><p>A built-in dashboard prioritizing failures by severity and impact on the user journey.</p></div>
-            <div class="feat-card"><h4>AI Fix Plans</h4><p>Don't just find bugs. Download complete `.patch` files generated by AI to immediately remediate issues.</p></div>
-            <div class="feat-card"><h4>Performance & Accessibility</h4><p>Automatically grade each route's performance and accessibility alongside standard regression checks.</p></div>
-          </div>
-        </section>
-        
-        <section class="p-section">
-          <div class="proof-grid">
-            <div><div class="proof-stat">4.2M+</div><div style="color:#888; font-size:18px;">Interactions analyzed</div></div>
-            <div><div class="proof-stat">850k</div><div style="color:#888; font-size:18px;">Issues detected</div></div>
-            <div><div class="proof-stat">120k</div><div style="color:#888; font-size:18px;">AI fixes deployed</div></div>
-          </div>
-        </section>
-        
-        <section class="cta-section">
+
+        <section class="cta-bottom reveal">
           <h2>Ready to ship with confidence?</h2>
-          <button class="btn primary" style="background:#fff; color:#000; padding:20px 40px; font-size:20px; font-weight:600;" onclick="location.hash='register'">Get Started</button>
+          <button class="btn-premium" style="font-size: 20px; padding: 24px 48px;" onclick="location.hash='register'">Start for free</button>
         </section>
       </div>
     </main></div>`;
+
+    // Initialize interactive scripts right after DOM injection
+    setTimeout(() => {
+      const container = document.getElementById('compareContainer');
+      const handle = document.getElementById('sliderHandle');
+      const afterPane = document.getElementById('compareAfter');
+      const green1 = document.getElementById('v-green-1');
+      const green2 = document.getElementById('v-green-2');
+      const red1 = document.getElementById('v-red-1');
+      const red2 = document.getElementById('v-red-2');
+      
+      if (!container || !handle || !afterPane) return;
+
+      let isDragging = false;
+      
+      const updateSlider = (x) => {
+        const rect = container.getBoundingClientRect();
+        let percent = ((x - rect.left) / rect.width) * 100;
+        percent = Math.max(0, Math.min(100, percent));
+        
+        handle.style.left = percent + '%';
+        afterPane.style.clipPath = `polygon(${percent}% 0, 100% 0, 100% 100%, ${percent}% 100%)`;
+        afterPane.style.borderLeftWidth = percent === 100 ? '0' : '2px';
+        
+        // Show/hide floating elements based on slider position
+        if (percent < 50) {
+          green1.style.opacity = '1';
+          green2.style.opacity = '1';
+          red1.style.opacity = '0';
+          red2.style.opacity = '0';
+        } else {
+          green1.style.opacity = '0';
+          green2.style.opacity = '0';
+          red1.style.opacity = '1';
+          red2.style.opacity = '1';
+        }
+      };
+
+      // Mouse drag
+      handle.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        document.body.style.cursor = 'ew-resize';
+      });
+      window.addEventListener('mouseup', () => {
+        isDragging = false;
+        document.body.style.cursor = '';
+      });
+      window.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        updateSlider(e.clientX);
+      });
+      
+      // Touch drag
+      handle.addEventListener('touchstart', (e) => {
+        isDragging = true;
+      }, {passive: true});
+      window.addEventListener('touchend', () => {
+        isDragging = false;
+      });
+      window.addEventListener('touchmove', (e) => {
+        if (!isDragging) return;
+        updateSlider(e.touches[0].clientX);
+      }, {passive: true});
+
+      // Scroll reveal observer
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('active');
+          }
+        });
+      }, { threshold: 0.1 });
+      
+      document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+      
+      // Initial trigger (set slider to 50%)
+      const initialRect = container.getBoundingClientRect();
+      updateSlider(initialRect.left + initialRect.width / 2);
+    }, 50);
   },
   
   auth: (isRegister) => {
@@ -368,8 +493,30 @@ const views = {
     </div>`;
     
     const rows = [[scanName, score, scanStatus]];
-    body += `<div class="anim-slide-in">
-      ${components.card('<h2>Recent scan runs</h2><table class="table"><thead><tr><th>Scan</th><th>Score</th><th>Status</th></tr></thead><tbody>'+rows.map(r=>`<tr><td ${!hasScanned ? 'style="color:var(--muted)"' : ''}>${r[0]}</td><td style="color:var(--lime)">${r[1]}</td><td><span class="tag ${hasScanned ? 'lime' : 'muted'}">${r[2]}</span></td></tr>`).join('')+'</tbody></table>')}
+    
+    const aiFixCard = components.card(`
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px;">
+        <div>
+          <h2 style="font-size:20px; font-weight:600; margin-bottom:4px; display:flex; align-items:center; gap:8px;"><span style="color:var(--lime)">✧</span> AI Fix Assistant</h2>
+          <p style="color:var(--muted); font-size:14px;">Need a deeper AI analysis?<br>Paste any Issue ID and LaunchGuard AI will generate a production-ready fix.</p>
+        </div>
+      </div>
+      <form class="form" onsubmit="event.preventDefault(); const id=this.issueId.value; if(id) location.hash='aifix?id='+id;">
+        <div class="field" style="margin-bottom:12px;">
+          <label>Issue ID</label>
+          <input name="issueId" placeholder="e.g. ISSUE-DFCF508F" required style="background:#0a0e14; border:1px solid rgba(255,255,255,0.1);">
+        </div>
+        <button type="submit" class="btn primary" style="width:100%;">Generate AI Fix ✨</button>
+      </form>
+    `, 'lift');
+
+    body += `<div class="grid cols2" style="gap:24px;">
+      <div class="anim-slide-in" style="animation-delay:0.1s;">
+        ${components.card('<h2>Recent scan runs</h2><table class="table" style="margin-top:16px;"><thead><tr><th>Scan</th><th>Score</th><th>Status</th></tr></thead><tbody>'+rows.map(r=>`<tr><td ${!hasScanned ? 'style="color:var(--muted)"' : ''}>${r[0]}</td><td style="color:var(--lime)">${r[1]}</td><td><span class="tag ${hasScanned ? 'lime' : 'muted'}">${r[2]}</span></td></tr>`).join('')+'</tbody></table>', 'lift')}
+      </div>
+      <div class="anim-slide-in" style="animation-delay:0.2s;">
+        ${aiFixCard}
+      </div>
     </div>`;
     
     body += components.wfNav('report');
@@ -414,6 +561,7 @@ const views = {
     </div>`;
     
     app.innerHTML = components.shell('Live scans', 'progress', body);
+    bindEvents();
     
     const source = new EventSource(`/api/scans/${scanId}/stream`);
     source.onmessage = (event) => {
@@ -475,29 +623,51 @@ const views = {
 
   shader: async () => {
     const nodes = await api.get('/api/nodes');
-    let body = components.head('Flow intelligence', 'Application Shader', 'Interactive visual map of crawled routes, node health, and page-level telemetry.');
+    let body = components.head('Flow intelligence', 'AI Website Journey Map', 'Interactive visual map of crawled routes, node health, and page-level telemetry.');
     
     // Inject Custom CSS for this view
     body += `
       <style>
-        .shader-container { position: relative; height: 550px; background: radial-gradient(circle at center, #111820 0, #07090c 100%); border-radius: 8px; overflow: hidden; border: 1px solid var(--line); }
-        .node-obj { position: absolute; padding: 10px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 4px 12px rgba(0,0,0,0.5); z-index: 10; animation: popIn 0.6s ease forwards; transform: scale(0); border: 1px solid rgba(255,255,255,0.1); }
-        .node-obj:hover { transform: scale(1.05) !important; z-index: 20; box-shadow: 0 0 20px currentColor; }
-        .node-obj.green { background: #0a1f11; color: var(--lime); border-color: var(--lime); }
-        .node-obj.yellow { background: #1f1a0a; color: var(--orange); border-color: var(--orange); }
-        .node-obj.red { background: #1f0a0a; color: var(--red); border-color: var(--red); }
-        @keyframes popIn { 0% { transform: scale(0); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+        .journey-container { position: relative; padding: 60px 20px; background: radial-gradient(circle at top, #0a0e14 0, #000 100%); border-radius: 12px; overflow-x: auto; overflow-y: hidden; border: 1px solid var(--line); margin-bottom: 24px; min-height: 400px; display: flex; align-items: center; }
+        .journey-track { display: flex; align-items: center; gap: 60px; margin: 0 auto; padding-bottom: 20px; position: relative; }
+        
+        .j-node { position: relative; width: 220px; border-radius: 12px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); cursor: pointer; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); box-shadow: 0 10px 30px rgba(0,0,0,0.5); z-index: 10; animation: slideInNode 0.8s ease forwards; opacity: 0; transform: translateX(-20px); }
+        .j-node:hover { transform: translateY(-5px); box-shadow: 0 15px 40px rgba(0,0,0,0.8); border-color: rgba(255,255,255,0.2); }
+        .j-node.green { border-top: 3px solid var(--lime); }
+        .j-node.yellow { border-top: 3px solid var(--orange); }
+        .j-node.red { border-top: 3px solid var(--red); box-shadow: 0 0 20px rgba(255,77,77,0.2); animation: slideInNode 0.8s ease forwards, pulseRed 2s infinite 1s; }
+        
+        .j-node-img { width: 100%; height: 120px; object-fit: cover; border-top-left-radius: 9px; border-top-right-radius: 9px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .j-node-info { padding: 16px; }
+        .j-node-title { font-weight: 600; font-size: 14px; margin-bottom: 4px; word-break: break-all; }
+        .j-node-status { font-size: 11px; font-family: 'DM Mono', monospace; display: flex; align-items: center; gap: 6px; }
+        
+        .j-conn { height: 2px; width: 60px; background: rgba(255,255,255,0.1); position: relative; overflow: hidden; opacity: 0; animation: fadeIn 0.5s forwards; flex-shrink: 0; }
+        .j-conn::after { content: ''; position: absolute; left: -100%; top: 0; height: 100%; width: 50%; background: linear-gradient(90deg, transparent, var(--cyan), transparent); animation: glowingFlow 2s linear infinite; }
+        
+        @keyframes slideInNode { to { opacity: 1; transform: translateX(0) translateY(0); } }
+        @keyframes fadeIn { to { opacity: 1; } }
+        @keyframes pulseRed { 0%, 100% { box-shadow: 0 0 20px rgba(255,77,77,0.2); } 50% { box-shadow: 0 0 40px rgba(255,77,77,0.5); } }
+        @keyframes glowingFlow { 100% { left: 200%; } }
         
         /* Side Panel */
-        .side-panel { position: absolute; right: -450px; top: 0; width: 400px; height: 100%; background: #0c1015; border-left: 1px solid var(--line); z-index: 100; transition: right 0.4s cubic-bezier(0.16, 1, 0.3, 1); display: flex; flex-direction: column; overflow-y: auto; padding: 24px; box-shadow: -10px 0 30px rgba(0,0,0,0.6); }
+        .side-panel { position: fixed; right: -500px; top: 0; width: 450px; height: 100%; background: #080b0e; border-left: 1px solid rgba(255,255,255,0.08); z-index: 10000; transition: right 0.4s cubic-bezier(0.16, 1, 0.3, 1); display: flex; flex-direction: column; overflow-y: auto; padding: 40px; box-shadow: -30px 0 60px rgba(0,0,0,0.9); }
         .side-panel.open { right: 0; }
-        .panel-close { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 20px; position: absolute; top: 20px; right: 20px; }
+        .panel-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(3px); z-index: 9999; opacity: 0; pointer-events: none; transition: opacity 0.4s; }
+        .panel-backdrop.open { opacity: 1; pointer-events: auto; }
+        .panel-close { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 24px; position: absolute; top: 24px; right: 24px; transition: color 0.2s; }
         .panel-close:hover { color: #fff; }
         
-        .metric-dial { width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700; border: 4px solid var(--line); margin-bottom: 8px; }
-        .dial-wrap { display: flex; flex-direction: column; align-items: center; font-size: 11px; color: var(--muted); font-family: 'DM Mono'; }
+        .metric-dial { width: 80px; height: 80px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 400; border: 2px solid rgba(255,255,255,0.1); margin-bottom: 12px; font-family: 'DM Mono', monospace; }
+        .dial-wrap { display: flex; flex-direction: column; align-items: center; font-size: 10px; color: var(--muted); font-family: 'DM Mono', monospace; letter-spacing: 1px; }
         
-        .error-log { font-family: 'DM Mono'; font-size: 11px; background: rgba(255,109,117,0.1); color: var(--red); padding: 8px 12px; border-radius: 4px; margin-bottom: 8px; border-left: 2px solid var(--red); word-break: break-all; }
+        .error-log { font-family: 'DM Mono'; font-size: 11px; background: rgba(255,109,117,0.05); color: var(--red); padding: 12px; border-radius: 6px; margin-bottom: 8px; border: 1px solid rgba(255,109,117,0.2); word-break: break-all; }
+        .ai-box { background: linear-gradient(to bottom, rgba(255,255,255,0.03), rgba(255,255,255,0.01)); border: 1px solid rgba(255,255,255,0.06); padding: 20px; border-radius: 12px; margin-bottom: 32px; }
+        
+        .exec-summary { display: grid; grid-template-columns: 2fr 1fr; gap: 24px; margin-bottom: 32px; }
+        .exec-text { padding: 24px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; }
+        .exec-text h3 { color: #fff; margin-bottom: 12px; font-size: 18px; }
+        .exec-text p { color: var(--muted); line-height: 1.6; font-size: 15px; }
       </style>
     `;
 
@@ -509,89 +679,122 @@ const views = {
       const healthy = nodes.filter(n => n.status === 'green').length;
       const broken = nodes.filter(n => n.status === 'red').length;
       
-      body += `<div class="grid cols4" style="margin-bottom: 24px;">
-        ${components.card(`<div class="split"><div class="stat-label">Routes Discovered</div><span class="tag cyan">CRAWLED</span></div><div class="stat-value">${total}</div>`, 'lift')}
-        ${components.card(`<div class="split"><div class="stat-label">Healthy Nodes</div><span class="tag lime">PASSING</span></div><div class="stat-value" style="color:var(--lime)">${healthy}</div>`, 'lift')}
-        ${components.card(`<div class="split"><div class="stat-label">Broken Nodes</div><span class="tag danger">FAILING</span></div><div class="stat-value" style="color:var(--red)">${broken}</div>`, 'lift')}
-        ${components.card(`<div class="split"><div class="stat-label">Test Coverage</div><span class="tag cyan">AI EST.</span></div><div class="stat-value">${Math.min(100, total * 30)}%</div>`, 'lift')}
-      </div>`;
-
-      // 2. Build Interactive Canvas
-      let svgs = '';
-      let divs = '';
+      const highestPriority = broken > 0 
+        ? "Fix the critical errors on the red nodes immediately to restore core flows."
+        : (total > healthy ? "Review warnings to prevent future regressions." : "No critical issues found. Maintain current test coverage.");
       
-      // We will attach node data to the DOM elements as data attributes so we can populate the side panel on click
+      const impact = broken > 0 ? "High - Users may be blocked." : "Low - Flows are stable.";
+
+      // Executive Summary
+      body += `
+        <div class="exec-summary">
+          <div class="exec-text">
+            <h3>AI Executive Summary</h3>
+            <p>During the automated crawl, the AI agent successfully mapped and validated <strong>${total}</strong> pages across the application. 
+            The journey was generally ${broken > 0 ? 'interrupted by critical failures' : 'smooth'}, with <strong>${healthy}</strong> pages passing all checks and <strong>${broken}</strong> problems found.</p>
+            <p style="margin-top:12px;"><strong>Estimated User Impact:</strong> <span style="color:${broken > 0 ? 'var(--red)' : 'var(--lime)'}">${impact}</span></p>
+            <p style="margin-top:8px;"><strong>Recommendation:</strong> ${highestPriority}</p>
+          </div>
+          <div class="grid cols2" style="gap: 16px; align-content: start;">
+            ${components.card(`<div class="stat-label">Pages Explored</div><div class="stat-value" style="font-size:32px;">${total}</div>`)}
+            ${components.card(`<div class="stat-label">Successful Pages</div><div class="stat-value" style="font-size:32px; color:var(--lime)">${healthy}</div>`)}
+            ${components.card(`<div class="stat-label">Problems Found</div><div class="stat-value" style="font-size:32px; color:${broken > 0 ? 'var(--red)' : '#fff'}">${broken}</div>`)}
+            ${components.card(`<div class="stat-label">Scan Coverage</div><div class="stat-value" style="font-size:32px;">${Math.min(100, total * 30)}%</div>`)}
+          </div>
+        </div>
+      `;
+
+      // 2. Build Interactive Journey
+      let journeyHtml = '<div class="journey-track">';
+      
       window.shaderNodesData = {};
       
       nodes.forEach((n, i) => {
-        window.shaderNodesData[n.id] = n; // store globally for click handler
+        window.shaderNodesData[n.id] = n;
         
-        const x = 10 + (i * 35); // Spread across X axis
-        const y = 40 + ((i % 2 === 0 ? -1 : 1) * 20); // Zig-zag Y axis
+        const animDelay = (i * 0.4) + 's';
+        const connDelay = (i * 0.4 + 0.3) + 's';
         
-        // Delay animation slightly for each node
-        const animDelay = (i * 0.2) + 's';
+        let statusText = '';
+        let statusColor = '';
+        if(n.status === 'green') { statusText = '● Healthy'; statusColor = 'var(--lime)'; }
+        else if(n.status === 'yellow') { statusText = '● Warning'; statusColor = 'var(--orange)'; }
+        else { statusText = '● Critical Issue'; statusColor = 'var(--red)'; }
+
+        // Node card
+        journeyHtml += `
+          <div class="j-node ${n.status}" style="animation-delay: ${animDelay};" onclick="window.openSidePanel('${n.id}')">
+            ${n.screenshot ? `<img src="${n.screenshot}" class="j-node-img">` : `<div class="j-node-img" style="display:grid;place-items:center;color:#333;">No Image</div>`}
+            <div class="j-node-info">
+              <div class="j-node-title">${n.path === '/' ? '/ (Home)' : n.path}</div>
+              <div class="j-node-status" style="color: ${statusColor};">${statusText}</div>
+            </div>
+          </div>
+        `;
         
         if (i < nodes.length - 1) {
-          const nx = 10 + ((i + 1) * 35);
-          const ny = 40 + (((i + 1) % 2 === 0 ? -1 : 1) * 20);
-          svgs += `<path d="M ${x}% ${y}% Q ${(x+nx)/2}% ${(y+ny)/2 - 10}% ${nx}% ${ny}%" fill="none" stroke="var(--line)" stroke-width="2" stroke-dasharray="5,5" style="animation: popIn 0.8s ease forwards; animation-delay: ${animDelay}; opacity: 0;"/>`;
-          // Draw an arrowhead
-          svgs += `<polygon points="${nx-1}%,${ny-2}% ${nx-1}%,${ny+2}% ${nx+1}%,${ny}%" fill="var(--line)" style="animation: popIn 0.8s ease forwards; animation-delay: ${animDelay}; opacity: 0;" />`;
+          journeyHtml += `<div class="j-conn" style="animation-delay: ${connDelay};"></div>`;
         }
-        
-        divs += `
-          <div class="node-obj ${n.status}" style="left: ${x}%; top: ${y}%; animation-delay: ${animDelay};" onclick="window.openSidePanel('${n.id}')">
-            ${n.path}
-            ${n.errors > 0 ? `<div style="font-size:10px; margin-top:4px; opacity:0.8;">${n.errors} ERRORS DETECTED</div>` : ''}
-          </div>`;
       });
+      
+      journeyHtml += '</div>';
 
       body += `
-        <div class="shader-container" id="shader-map">
-           <svg style="position:absolute; width:100%; height:100%; pointer-events:none;">${svgs}</svg>
-           ${divs}
+        <div class="journey-container">
+           ${journeyHtml}
+        </div>
+        <div style="font-family:'DM Mono'; font-size:11px; background:rgba(255,255,255,0.02); padding:16px; border-radius:8px; border:1px solid var(--line); display:flex; gap:24px;">
+           <b style="color:#fff; margin-right:12px;">LEGEND</b>
+           <div><span style="color:var(--lime); margin-right:6px;">●</span> Healthy (No errors)</div>
+           <div><span style="color:var(--orange); margin-right:6px;">●</span> Warning (&lt; 3 errors)</div>
+           <div><span style="color:var(--red); margin-right:6px;">●</span> Critical (Broken page)</div>
+        </div>
            
-           <div style="position:absolute; bottom:20px; left:20px; font-family:'DM Mono'; font-size:10px; background:rgba(0,0,0,0.6); padding:12px; border-radius:6px; border:1px solid var(--line); z-index:5;">
-             <div style="margin-bottom:6px;"><span style="color:var(--lime); display:inline-block; width:10px;">●</span> Healthy Route</div>
-             <div style="margin-bottom:6px;"><span style="color:var(--orange); display:inline-block; width:10px;">●</span> Warnings Detected</div>
-             <div><span style="color:var(--red); display:inline-block; width:10px;">●</span> Broken / Exceptions</div>
-           </div>
-           
-           <!-- Slide Out Panel -->
-           <div id="node-panel" class="side-panel">
-             <button class="panel-close" onclick="document.getElementById('node-panel').classList.remove('open')">✕</button>
-             
-             <div class="eyebrow">NODE TELEMETRY</div>
-             <h2 id="np-path" style="margin-bottom: 8px; font-size: 20px; word-break: break-all;">/path</h2>
-             <div id="np-status-tag" style="margin-bottom: 24px;"></div>
-             
-             <div style="border: 1px solid var(--line); border-radius: 6px; overflow: hidden; margin-bottom: 24px;">
-               <div style="background: #111820; padding: 6px 12px; font-family:'DM Mono'; font-size:10px; color:var(--muted); border-bottom: 1px solid var(--line);">DOM Snapshot</div>
-               <img id="np-img" src="" style="width: 100%; display: block;" alt="Screenshot">
+        <div class="panel-backdrop" id="panel-backdrop" onclick="window.closeSidePanel()"></div>
+        <div id="node-panel" class="side-panel">
+          <button class="panel-close" onclick="window.closeSidePanel()">✕</button>
+          
+          <div class="eyebrow" style="margin-bottom:8px; letter-spacing:1.5px; opacity:0.7;">NODE TELEMETRY</div>
+          <h2 id="np-path" style="margin-bottom: 12px; font-size: 22px; font-weight:400; word-break: break-all;">/path</h2>
+          <div id="np-status-tag" style="margin-bottom: 32px;"></div>
+          
+          <div class="ai-box" id="np-ai-box">
+             <div style="font-size:10px; font-weight:700; color:var(--lime); letter-spacing:1px; margin-bottom:12px; display:flex; align-items:center; gap:6px;">
+               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"/></svg>
+               AI EXPLANATION
              </div>
-             
-             <div class="grid cols3" style="gap: 12px; margin-bottom: 24px;">
-               <div class="dial-wrap"><div class="metric-dial" id="np-load" style="color:var(--cyan); border-color:var(--cyan)">--</div>LOAD</div>
-               <div class="dial-wrap"><div class="metric-dial" id="np-perf">--</div>PERF</div>
-               <div class="dial-wrap"><div class="metric-dial" id="np-a11y">--</div>A11Y</div>
-             </div>
-             
-             <div id="np-errors-container"></div>
-             
-             <div style="margin-top: auto; padding-top: 24px;">
-               <button class="btn ghost" style="width:100%; margin-bottom:12px;" data-go="issue">View Related Issues →</button>
-               <button class="btn primary" style="width:100%;" data-go="fix">Generate AI Fix</button>
-             </div>
-           </div>
+             <p id="np-ai-desc" style="color:#d1d5db; font-size:14px; line-height:1.6; font-weight:300;">Analyzing node...</p>
+          </div>
+          
+          <div style="border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; overflow: hidden; margin-bottom: 32px; background:rgba(0,0,0,0.3);">
+            <div style="padding: 12px 16px; font-family:'DM Mono'; font-size:10px; color:var(--muted); border-bottom: 1px solid rgba(255,255,255,0.06); letter-spacing:0.5px;">VIEWPORT SNAPSHOT</div>
+            <img id="np-img" src="" style="width: 100%; display: block;" alt="Screenshot">
+          </div>
+          
+          <div class="grid cols3" style="gap: 16px; margin-bottom: 40px;">
+            <div class="dial-wrap"><div class="metric-dial" id="np-load" style="color:var(--cyan); border-color:rgba(0,184,255,0.2);">--</div>LOAD</div>
+            <div class="dial-wrap"><div class="metric-dial" id="np-perf">--</div>PERFORMANCE</div>
+            <div class="dial-wrap"><div class="metric-dial" id="np-a11y">--</div>ACCESSIBILITY</div>
+          </div>
+          
+          <div id="np-errors-container"></div>
+          
+          <div style="margin-top: auto; padding-top: 40px; display:flex; flex-direction:column; gap:12px;">
+            <button class="btn ghost" style="width:100%; font-weight:400; border-color:rgba(255,255,255,0.1);" data-go="replay">Replay Journey ↝</button>
+            <button class="btn ghost" style="width:100%; font-weight:400; border-color:rgba(255,255,255,0.1);" data-go="issue">Open Related Issue</button>
+            <button class="btn primary" style="width:100%; font-weight:500;" data-go="fix">View AI Fix</button>
+          </div>
         </div>
       `;
       
-      // Inject global script for panel toggling
       if(!window.openSidePanelScriptInjected) {
         window.openSidePanelScriptInjected = true;
         const script = document.createElement('script');
         script.innerHTML = `
+          window.closeSidePanel = function() {
+            document.getElementById('node-panel').classList.remove('open');
+            document.getElementById('panel-backdrop').classList.remove('open');
+          };
           window.openSidePanel = function(nodeId) {
             const data = window.shaderNodesData[nodeId];
             if(!data) return;
@@ -599,11 +802,17 @@ const views = {
             document.getElementById('np-path').innerText = data.path;
             
             const tag = document.getElementById('np-status-tag');
-            if(data.status === 'green') tag.innerHTML = '<span class="tag lime">PASSING</span>';
-            else if(data.status === 'yellow') tag.innerHTML = '<span class="tag warn">WARNINGS</span>';
-            else tag.innerHTML = '<span class="tag danger">FAILING</span>';
+            if(data.status === 'green') tag.innerHTML = '<span class="tag lime">SUCCESSFUL</span>';
+            else if(data.status === 'yellow') tag.innerHTML = '<span class="tag warn">WARNINGS FOUND</span>';
+            else tag.innerHTML = '<span class="tag danger">CRITICAL FAILURE</span>';
             
-            document.getElementById('np-img').src = data.screenshot;
+            // Mock AI Narrative
+            let aiText = "The page rendered successfully with no major interruptions to the user journey.";
+            if(data.status === 'red') aiText = "The agent detected a fatal error during rendering. This is actively blocking users from progressing. A patch is available.";
+            else if(data.status === 'yellow') aiText = "The page loaded, but the agent flagged performance warnings and non-fatal console errors. Monitor closely.";
+            document.getElementById('np-ai-desc').innerText = aiText;
+            
+            document.getElementById('np-img').src = data.screenshot || '';
             
             document.getElementById('np-load').innerText = data.load_time ? data.load_time + 'ms' : 'N/A';
             
@@ -633,22 +842,23 @@ const views = {
             
             errsContainer.innerHTML = errHtml;
             
-            // Re-bind routing buttons inside panel
             document.querySelectorAll('#node-panel [data-go]').forEach(b => {
               b.onclick = (e) => {
                 e.preventDefault();
+                window.closeSidePanel();
                 location.hash = b.dataset.go;
               };
             });
             
             document.getElementById('node-panel').classList.add('open');
+            document.getElementById('panel-backdrop').classList.add('open');
           };
         `;
         document.body.appendChild(script);
       }
     }
     body += components.wfNav('shader');
-    app.innerHTML = components.shell('Shader', 'shader', body);
+    app.innerHTML = components.shell('AI Website Journey Map', 'shader', body);
     bindEvents();
   },
 
@@ -692,7 +902,10 @@ const views = {
           <td><span class="tag danger">${i.status}</span></td>
           <td>${i.severity}</td>
           <td style="color:var(--muted)"><code>${i.affected_component}</code></td>
-          <td><button class="btn ghost" data-go="fix">Open Fix</button></td>
+          <td>
+            <button class="btn ghost" data-go="fix">Open Fix</button>
+            <button class="btn primary" style="margin-left:8px;" onclick="location.hash='aifix?id=${i.id}'">Open AI Fix Assistant ✨</button>
+          </td>
         </tr>
       `).join('');
     }
@@ -727,8 +940,9 @@ const views = {
               <div><b>Affected URL:</b> ${targetIssue.affected_url}</div>
               ${targetIssue.stack_trace ? `<div style="margin-top:12px; color:var(--red)">${targetIssue.stack_trace.replace(/\n/g, '<br>')}</div>` : ''}
             </div>
-            <div style="margin-top:24px;">
+            <div style="margin-top:24px; display:flex; gap:12px;">
               <button class="btn primary" onclick="actions.applyPatch('${targetIssue.id}', decodeURIComponent('${patchContent}'))">Download Patch</button>
+              <button class="btn ghost" style="border-color:var(--lime); color:var(--lime);" onclick="location.hash='aifix?id=${targetIssue.id}'">Improve with AI ✨</button>
             </div>
           `)}
         </div>
@@ -747,6 +961,233 @@ const views = {
     }
     body += components.wfNav('fix');
     app.innerHTML = components.shell('AI fix plans', 'fix', body);
+    bindEvents();
+  },
+
+  aifix: async () => {
+    const params = new URLSearchParams(window.location.hash.split('?')[1]);
+    const initialIssueId = params.get('id') || '';
+
+    let body = components.head('OpenRouter AI Agent', 'AI Fix Assistant', 'AI-powered root-cause analysis and automated engineering patch generation.');
+    
+    body += `
+      <style>
+        .ai-loading { font-family: 'DM Mono', monospace; font-size: 13px; color: var(--lime); padding: 24px; background: rgba(0,255,136,0.05); border: 1px solid rgba(0,255,136,0.2); border-radius: 8px; margin-bottom: 24px; display: none; }
+        .ai-result { display: none; animation: fadeIn 0.5s ease; }
+        .res-section { margin-bottom: 32px; }
+        .res-section h3 { font-size: 18px; margin-bottom: 12px; color: #fff; border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+        .res-section p { color: var(--muted); line-height: 1.6; font-size: 14px; margin-bottom: 12px; }
+        .code-block { background: #080b0e; border: 1px solid var(--line); border-radius: 6px; padding: 16px; font-family: 'DM Mono', monospace; font-size: 12px; color: #d1d5db; overflow-x: auto; margin-bottom: 16px; white-space: pre-wrap; }
+        .diff-add { color: var(--lime); background: rgba(0,255,136,0.1); }
+        .diff-remove { color: var(--red); background: rgba(255,77,77,0.1); }
+      </style>
+      <div class="grid" style="grid-template-columns: 350px 1fr; gap: 24px; align-items: start;">
+        ${components.card(`
+          <form id="ai-fix-form" onsubmit="window.generateAIFix(event)">
+            <div class="field" style="margin-bottom:16px;">
+              <label>Issue ID</label>
+              <input name="issueId" id="aifix-issue-id" required value="${initialIssueId}" placeholder="e.g. ISSUE-DFCF508F" style="background:#0a0e14; border:1px solid var(--line);">
+            </div>
+            <div class="field" style="margin-bottom:16px;">
+              <label>AI Model</label>
+              <select name="model" style="width:100%; padding:12px; background:#0a0e14; border:1px solid var(--line); color:#fff; border-radius:6px; font-size:14px; outline:none;">
+                <optgroup label="Free / Open Source Models">
+                  <option value="meta-llama/llama-3-8b-instruct:free" selected>Llama 3 8B (Free)</option>
+                  <option value="mistralai/mistral-7b-instruct:free">Mistral 7B (Free)</option>
+                  <option value="google/gemma-2-9b-it:free">Gemma 2 9B (Free)</option>
+                </optgroup>
+                <optgroup label="Paid / Premium Models">
+                  <option value="google/gemini-2.5-flash">Gemini 2.5 Flash</option>
+                  <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet</option>
+                  <option value="openai/gpt-4o">GPT-4o</option>
+                </optgroup>
+              </select>
+            </div>
+            <div class="field" style="margin-bottom:24px;">
+              <label>OpenRouter API Key (Optional)</label>
+              <input type="password" name="apiKey" placeholder="sk-or-v1-..." style="width:100%; padding:12px; background:#0a0e14; border:1px solid var(--line); color:#fff; border-radius:6px; font-size:14px; outline:none;">
+            </div>
+            <button type="submit" class="btn primary" style="width:100%; margin-bottom:12px;" id="aifix-btn">Generate AI Fix ✨</button>
+            <button type="button" class="btn ghost" style="width:100%; margin-bottom:12px;" onclick="document.getElementById('ai-fix-form').reset(); document.getElementById('aifix-result').style.display='none';">Clear</button>
+            <button type="button" class="btn ghost" style="width:100%;" onclick="window.loadRecentFixes()">Recent Fixes</button>
+          </form>
+        `)}
+        
+        <div>
+          <div id="aifix-loading" class="ai-loading">
+            <div style="margin-bottom:8px;">[SYSTEM] Initializing AI Fix Assistant...</div>
+            <div id="ai-loading-step" style="opacity:0.8;">Waiting for input.</div>
+          </div>
+          
+          <div id="aifix-result" class="ai-result">
+            <!-- Results injected here -->
+          </div>
+        </div>
+      </div>
+    `;
+    
+    if(!window.aifixScriptInjected) {
+      window.aifixScriptInjected = true;
+      const script = document.createElement('script');
+      script.innerHTML = `
+        window.loadRecentFixes = async () => {
+          const res = await fetch('/api/ai/fix/recent');
+          const data = await res.json();
+          alert('Loaded ' + data.length + ' recent fixes. (Check console for raw data)');
+          console.log(data);
+        };
+        
+        window.generateAIFix = async (e) => {
+          e.preventDefault();
+          const form = e.target;
+          const issueId = form.issueId.value;
+          const model = form.model.value;
+          const apiKey = form.apiKey.value;
+          
+          const loading = document.getElementById('aifix-loading');
+          const result = document.getElementById('aifix-result');
+          const step = document.getElementById('ai-loading-step');
+          const btn = document.getElementById('aifix-btn');
+          
+          btn.disabled = true;
+          result.style.display = 'none';
+          loading.style.display = 'block';
+          
+          const steps = [
+            'Collecting Issue...', 'Loading Playwright Logs...', 'Loading Console Errors...',
+            'Preparing AI Context...', 'Connecting to OpenRouter...', 'Generating Engineering Analysis...',
+            'Building Code Patch...'
+          ];
+          
+          let i = 0;
+          const intv = setInterval(() => {
+            if(i < steps.length) step.innerText = '[SYSTEM] ' + steps[i++];
+          }, 800);
+          
+          try {
+            const res = await fetch('/api/ai/fix', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({ issueId, model, apiKey })
+            });
+            
+            clearInterval(intv);
+            
+            let data;
+            const contentType = res.headers.get('content-type') || '';
+            if (contentType.includes('application/json')) {
+              data = await res.json();
+            } else {
+              const text = await res.text();
+              console.error("[AI Fix Assistant] Non-JSON response:", text);
+              throw new Error(\`Server returned an invalid response (Status: \${res.status}). Please restart your Node server.\`);
+            }
+            
+            if(!res.ok) {
+              throw new Error(data.error || 'Unable to generate AI analysis. Please try again.');
+            }
+            
+            step.innerText = '[SYSTEM] Finished';
+            
+            if (data.error) throw new Error(data.error);
+            
+            setTimeout(() => {
+              loading.style.display = 'none';
+              result.innerHTML = window.renderAIFixResult(data);
+              result.style.display = 'block';
+              btn.disabled = false;
+            }, 500);
+            
+          } catch(err) {
+            clearInterval(intv);
+            step.innerText = '[ERROR] ' + err.message;
+            step.style.color = 'var(--red)';
+            btn.disabled = false;
+          }
+        };
+        
+        window.renderAIFixResult = (data) => {
+          return \`
+            <div class="card" style="border:1px solid var(--lime);">
+              <div class="res-section">
+                <h3 style="color:var(--lime); border-bottom-color:rgba(0,255,136,0.2);">Executive Summary</h3>
+                <p>\${data.executive_summary}</p>
+              </div>
+              
+              <div class="res-section">
+                <h3>Root Cause</h3>
+                <p>\${data.root_cause}</p>
+                <div style="margin-top:8px; padding:12px; background:rgba(255,255,255,0.02); border-left:3px solid var(--orange);">
+                  <b style="color:var(--orange); font-size:12px; display:block; margin-bottom:4px;">WHY IT HAPPENED</b>
+                  <p style="margin:0; font-size:13px;">\${data.why_happened}</p>
+                </div>
+              </div>
+              
+              <div class="res-section">
+                <h3>Evidence & Impact</h3>
+                <p><b>Impact:</b> \${data.production_impact}</p>
+                <p><b>Affected Files:</b> \${(data.affected_files||[]).join(', ')}</p>
+                <p><b>Risk Assessment:</b> \${data.risk_assessment}</p>
+              </div>
+              
+              <div class="res-section">
+                <h3>Code Patch</h3>
+                <p>\${data.code_explanation}</p>
+                <div style="margin-bottom:12px;">
+                  <b>Steps to Fix:</b>
+                  <ul style="color:var(--muted); font-size:13px; margin-top:8px; padding-left:20px;">
+                    \${(data.step_by_step_fix||[]).map(s => '<li>'+s+'</li>').join('')}
+                  </ul>
+                </div>
+                <div class="grid cols2" style="gap:16px;">
+                  <div>
+                    <div style="font-size:11px; font-family:'DM Mono'; color:var(--red); margin-bottom:4px;">BEFORE</div>
+                    <div class="code-block diff-remove">\${data.before_code}</div>
+                  </div>
+                  <div>
+                    <div style="font-size:11px; font-family:'DM Mono'; color:var(--lime); margin-bottom:4px;">AFTER</div>
+                    <div class="code-block diff-add">\${data.after_code}</div>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="res-section">
+                <h3>Confidence & Testing</h3>
+                <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;">
+                  <div style="font-size:32px; font-weight:700; color:var(--lime);">\${data.confidence_score}%</div>
+                  <div style="color:var(--muted); font-size:12px; text-transform:uppercase;">AI Confidence Score</div>
+                </div>
+                <b>Regression Tests:</b>
+                <ul style="color:var(--muted); font-size:13px; margin-top:8px; padding-left:20px; margin-bottom:16px;">
+                  \${(data.regression_tests||[]).map(s => '<li>'+s+'</li>').join('')}
+                </ul>
+              </div>
+              
+              <div style="display:flex; gap:12px; border-top:1px solid var(--line); padding-top:24px;">
+                <button class="btn primary" onclick="alert('Patch Copied!')">Copy Patch</button>
+                <button class="btn ghost" onclick="alert('Downloading...')">Download Patch</button>
+                <button class="btn ghost">Explain Simpler</button>
+                <button class="btn ghost">Regenerate</button>
+                <button class="btn ghost" style="margin-left:auto;">Create GitHub Issue</button>
+              </div>
+            </div>
+          \`;
+        };
+      `;
+      document.body.appendChild(script);
+    }
+    
+    if (initialIssueId) {
+      setTimeout(() => {
+        const form = document.getElementById('ai-fix-form');
+        if(form && typeof window.generateAIFix === 'function') {
+          window.generateAIFix({ preventDefault: () => {}, target: form });
+        }
+      }, 300);
+    }
+
+    body += components.wfNav('aifix');
+    app.innerHTML = components.shell('AI Fix Assistant', 'aifix', body);
     bindEvents();
   },
 

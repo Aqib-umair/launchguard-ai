@@ -93,6 +93,16 @@ export async function initDb() {
       status TEXT,
       reasoning TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS ai_fix_requests (
+      id TEXT PRIMARY KEY,
+      issue_id TEXT,
+      scan_id TEXT,
+      model TEXT,
+      response_json TEXT,
+      execution_time INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
   return db;
