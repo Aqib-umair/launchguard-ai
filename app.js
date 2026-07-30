@@ -1152,8 +1152,9 @@ const views = {
                 <button class="btn primary" style="width:100%; padding:14px; font-size:16px; margin-top:8px;" onclick="
                   const mode = document.querySelector('input[name=\\'ai-mode\\']:checked').value;
                   const model = mode === 'local' ? document.getElementById('free-model-select').value : document.getElementById('premium-model-select').value;
+                  const apiKey = document.getElementById('openrouter-key') ? document.getElementById('openrouter-key').value : '';
                   document.getElementById('aifix-setup').style.display='none';
-                  window.generateAIFix('${initialIssueId}', mode, model);
+                  window.generateAIFix('${initialIssueId}', mode, model, apiKey);
                 ">Run AI Assistant ✨</button>
               `)}
             </div>
@@ -1182,7 +1183,7 @@ const views = {
           console.log(data);
         };
         
-        window.generateAIFix = async (issueId, mode, model) => {
+        window.generateAIFix = async (issueId, mode, model, apiKey) => {
           const loading = document.getElementById('aifix-loading');
           const result = document.getElementById('aifix-result');
           const step = document.getElementById('ai-loading-step');
@@ -1203,7 +1204,7 @@ const views = {
             const res = await fetch('/api/ai/fix', {
               method: 'POST',
               headers: {'Content-Type': 'application/json'},
-              body: JSON.stringify({ issueId, mode, model })
+              body: JSON.stringify({ issueId, mode, model, apiKey })
             });
             
             clearInterval(intv);
@@ -1241,7 +1242,7 @@ const views = {
                 <div style="font-weight:bold; color:var(--red); font-size:18px; margin-bottom:8px;">AI Analysis Failed</div>
                 <div style="color:var(--text); font-size:14px; margin-bottom:24px;">Reason: \${err.message}</div>
                 <div style="display:flex; gap:12px; justify-content:center;">
-                  <button class="btn primary" onclick="window.generateAIFix('\${issueId}', '\${mode}', '\${model}')">Retry</button>
+                  <button class="btn primary" onclick="window.generateAIFix('\${issueId}', '\${mode}', '\${model}', '')">Retry</button>
                   <button class="btn ghost" onclick="document.getElementById('aifix-setup').style.display='block'; document.getElementById('aifix-result').style.display='none';">Change AI Model</button>
                   <button class="btn ghost" onclick="location.hash='issue'">Go Back</button>
                 </div>
@@ -1291,7 +1292,10 @@ const views = {
                   <div><span style="color:var(--muted); font-size:12px;">IMPACT</span><br><b style="color:#fff;">\${data.problem_analysis?.production_impact || 'Unknown'}</b></div>
                 </div>
                 <p><b>Why it happened:</b> \${data.problem_analysis?.why_happened || 'N/A'}</p>
+                <p><b>Bug Explanation:</b> \${data.problem_analysis?.bug_explanation || 'N/A'}</p>
+                <p><b>Root Cause:</b> \${data.problem_analysis?.root_cause || 'N/A'}</p>
                 <p><b>Affected component:</b> \${data.problem_analysis?.affected_component || 'N/A'}</p>
+                <p><b>Affected files:</b> \${data.problem_analysis?.affected_files?.join(', ') || 'N/A'}</p>
               </div>
             </div>
             
@@ -1344,28 +1348,10 @@ const views = {
             </div>
             
             <div class="res-section">
-              <h3>How to Use</h3>
-              <p style="color:var(--muted); font-size:14px; margin-bottom:16px;">Step-by-step instructions to apply this fix.</p>
+              <h3>IDE Usage Guide</h3>
+              <p style="color:var(--muted); font-size:14px; margin-bottom:16px;">Instructions for applying this fix.</p>
               <div style="background:#080b0e; padding:20px; border-radius:6px; border:1px solid var(--line);">
-                \${[
-                  'Copy the generated prompt.',
-                  'Open your preferred AI coding IDE (Cursor, Windsurf, etc).',
-                  'Open your GitHub repository.',
-                  'Paste the generated prompt.',
-                  'Allow the AI to generate the fix.',
-                  'Review the generated code.',
-                  'Run <code>npm install</code>',
-                  'Run <code>npm test</code>',
-                  'Run <code>npm run dev</code>',
-                  'Verify the bug is fixed.',
-                  'Commit your changes.',
-                  'Push to GitHub.'
-                ].map((step, idx, arr) => \`
-                  <div style="display:flex; gap:16px; margin-bottom:\${idx === arr.length-1 ? '0' : '16px'};">
-                    <div style="width:24px; height:24px; border-radius:12px; background:var(--lime); color:#000; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:12px; flex-shrink:0;">\${idx+1}</div>
-                    <div style="color:var(--text); font-family:'DM Mono'; font-size:13px; line-height:24px;">\${step}</div>
-                  </div>
-                \`).join('')}
+                <p>\${data.ide_usage_guide || 'No specific IDE instructions provided. Paste the developer prompt into your preferred AI coding assistant.'}</p>
               </div>
             </div>
             
@@ -1388,8 +1374,8 @@ const views = {
       }
       
       const originalGenerateAIFix = window.generateAIFix;
-      window.generateAIFix = async (issueId, mode, model) => {
-          await originalGenerateAIFix(issueId, mode, model);
+      window.generateAIFix = async (issueId, mode, model, apiKey) => {
+          await originalGenerateAIFix(issueId, mode, model, apiKey);
           setTimeout(() => {
               if (window.mermaid) {
                   window.mermaid.init(undefined, document.querySelectorAll('.mermaid'));

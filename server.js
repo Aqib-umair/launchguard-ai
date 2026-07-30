@@ -120,31 +120,43 @@ app.get('/api/evals', async (req, res) => {
 });
 
 app.post('/api/ai/fix', async (req, res) => {
-  const { issueId, mode, model } = req.body;
+  const { issueId, mode, model, apiKey } = req.body;
   console.log(`\n[AI Fix Assistant] Incoming request - Issue: ${issueId}, Mode: ${mode}, Model: ${model}`);
   
   const db = getDb();
   
   try {
-    console.log(`[AI Fix Assistant] Database lookup for issue ${issueId}...`);
+    console.log(`[AI Fix Assistant] Loading bug information for issue ${issueId}...`);
     const issue = await db.get(`SELECT * FROM issues WHERE id = ?`, [issueId]);
     if (!issue) {
-      console.log(`[AI Fix Assistant] Error: Issue not found.`);
-      return res.status(404).json({ error: 'Issue not found.' });
+      console.error(`[AI Fix Assistant] Validation Error: Bug ID ${issueId} does not exist.`);
+      return res.status(404).json({ error: `Bug ID ${issueId} does not exist.` });
     }
     
-    console.log(`[AI Fix Assistant] Database lookup for scan ${issue.scan_id}...`);
+    console.log(`[AI Fix Assistant] Loading scan information for scan ${issue.scan_id}...`);
     const scan = await db.get(`SELECT * FROM scans WHERE id = ?`, [issue.scan_id]);
+    if (!scan) {
+      console.error(`[AI Fix Assistant] Validation Error: Required scan data was not found.`);
+      return res.status(400).json({ error: 'Required scan data was not collected.' });
+    }
     
+    console.log(`[AI Fix Assistant] Loading repository data...`);
     let packageJson = '';
     let readme = '';
     try {
       packageJson = fs.readFileSync(path.join(__dirname, 'package.json'), 'utf-8');
-    } catch(e) { console.log('[AI Fix Assistant] package.json not found'); }
+    } catch(e) { 
+      console.error('[AI Fix Assistant] Validation Error: Repository could not be analyzed (package.json missing).'); 
+      return res.status(400).json({ error: 'Repository could not be analyzed.' });
+    }
     try {
       readme = fs.readFileSync(path.join(__dirname, 'README.md'), 'utf-8');
-    } catch(e) { console.log('[AI Fix Assistant] README.md not found'); }
+      console.log('[AI Fix Assistant] README parsed successfully.');
+    } catch(e) { 
+      console.warn('[AI Fix Assistant] Validation Warning: README.md not found. Proceeding without it.');
+    }
     
+    console.log(`[AI Fix Assistant] Generating prompt...`);
     const prompt = `You are a Principal AI Software Engineer analyzing a production bug.
 Return a JSON object EXACTLY matching this structure:
 {
@@ -158,7 +170,8 @@ Return a JSON object EXACTLY matching this structure:
     "affected_files": ["file1.js"],
     "affected_function": "Function name",
     "affected_component": "Component name",
-    "root_cause": "Detailed root cause"
+    "root_cause": "Detailed root cause",
+    "bug_explanation": "A beginner-friendly explanation of the bug"
   },
   "engineering_solution": {
     "step_by_step": ["Step 1 explanation", "Step 2 explanation"],
@@ -168,7 +181,8 @@ Return a JSON object EXACTLY matching this structure:
     "regression_tests": ["Test 1", "Test 2"],
     "confidence_score": 96
   },
-  "developer_prompt": "Generate ONE complete engineering prompt that is ready to paste into an AI coding assistant (e.g. Cursor, Claude Code, Codex, Antigravity, GitHub Copilot, Windsurf)."
+  "developer_prompt": "Generate ONE complete engineering prompt that is ready to paste into an AI coding assistant (e.g. Cursor, Claude Code, Codex, Antigravity, GitHub Copilot, Windsurf).",
+  "ide_usage_guide": "Brief guide on how to use the developer prompt in an IDE."
 }
 
 Repository Context:
@@ -191,43 +205,74 @@ ${issue.stack_trace || 'None'}
     let aiData;
     
     if (mode === 'local') {
-      const ollamaRes = await fetch('http://localhost:11434/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: model || 'llama3',
-          prompt: prompt,
-          format: 'json',
-          stream: false
-        })
-      });
-      if (!ollamaRes.ok) {
-        const errText = await ollamaRes.text();
-        console.error(`[AI Fix Assistant] Ollama API Error (${ollamaRes.status}):`, errText);
-        throw new Error(`Ollama API Error: ${ollamaRes.status}. Make sure Ollama is running locally.`);
+      try {
+        const ollamaRes = await fetch('http://localhost:11434/api/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: model || 'llama3',
+            prompt: prompt,
+            format: 'json',
+            stream: false
+          })
+        });
+        if (!ollamaRes.ok) {
+          const errText = await ollamaRes.text();
+          console.error(`[AI Fix Assistant] Ollama API Error (${ollamaRes.status}):`, errText);
+          throw new Error(`Ollama API Error: ${ollamaRes.status}. Make sure Ollama is running locally.`);
+        }
+        const rawData = await ollamaRes.json();
+        aiData = { choices: [{ message: { content: rawData.response } }] };
+      } catch (e) {
+        console.error(`[AI Fix Assistant] Ollama fetch failed:`, e.message);
+        throw new Error('Local AI is unavailable because Ollama is not running.');
       }
-      const rawData = await ollamaRes.json();
-      aiData = { choices: [{ message: { content: rawData.response } }] };
     } else {
-      const openRouterRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY || ''}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: model || 'google/gemini-2.5-flash',
-          messages: [{ role: 'user', content: prompt }],
-          response_format: { type: 'json_object' }
-        })
-      });
+      const finalApiKey = apiKey || process.env.OPENROUTER_API_KEY;
+      if (!finalApiKey || finalApiKey.trim() === '') {
+        console.error(`[AI Fix Assistant] Error: Invalid OpenRouter API key.`);
+        return res.status(401).json({ error: 'Invalid OpenRouter API key.' });
+      }
+
+      console.log(`[AI Fix Assistant] Request URL: https://openrouter.ai/api/v1/chat/completions`);
+      console.log(`[AI Fix Assistant] Selected Model: ${model || 'google/gemini-2.5-flash'}`);
+
+      let openRouterRes;
+      try {
+        openRouterRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${finalApiKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            model: model || 'google/gemini-2.5-flash',
+            messages: [{ role: 'user', content: prompt }],
+            response_format: { type: 'json_object' }
+          })
+        });
+      } catch (e) {
+        console.error(`[AI Fix Assistant] OpenRouter fetch failed:`, e.message);
+        throw new Error('Network timeout.');
+      }
+
+      console.log(`[AI Fix Assistant] HTTP Status: ${openRouterRes.status}`);
 
       if (!openRouterRes.ok) {
         const errText = await openRouterRes.text();
-        console.error(`[AI Fix Assistant] OpenRouter API Error (${openRouterRes.status}):`, errText);
-        throw new Error(`OpenRouter API Error: ${openRouterRes.status}`);
+        console.error(`[AI Fix Assistant] OpenRouter Response Body:`, errText);
+        let errorMsg = `OpenRouter returned an error (${openRouterRes.status}).`;
+        if (openRouterRes.status === 401) errorMsg = 'Invalid OpenRouter API key.';
+        else if (openRouterRes.status === 403) errorMsg = 'Permission Denied.';
+        else if (openRouterRes.status === 429) errorMsg = 'Rate limit exceeded.';
+        else if (openRouterRes.status === 404) errorMsg = 'Model unavailable.';
+        else if (openRouterRes.status === 408 || openRouterRes.status === 504) errorMsg = 'Network timeout.';
+        else if (openRouterRes.status >= 500) errorMsg = 'Internal Server Error.';
+        return res.status(openRouterRes.status).json({ error: errorMsg });
       }
+      
       aiData = await openRouterRes.json();
+      console.log(`[AI Fix Assistant] Complete OpenRouter Response:\n`, JSON.stringify(aiData, null, 2));
     }
 
     console.log(`[AI Fix Assistant] AI response received successfully.`);
@@ -236,7 +281,7 @@ ${issue.stack_trace || 'None'}
       parsedResponse = JSON.parse(aiData.choices[0].message.content);
     } catch (e) {
       console.error(`[AI Fix Assistant] Error parsing OpenRouter JSON response.`);
-      parsedResponse = { error: "Failed to parse AI response as JSON.", raw: aiData.choices[0].message.content };
+      return res.status(500).json({ error: 'Prompt generation failed. AI returned malformed JSON.' });
     }
 
     const fixId = `FIX-${randomUUID().split('-')[0].toUpperCase()}`;
@@ -245,11 +290,11 @@ ${issue.stack_trace || 'None'}
       [fixId, issueId, scan?.id, model || (mode === 'local' ? 'ollama/llama3' : 'google/gemini-2.5-flash'), JSON.stringify(parsedResponse), 1200]
     );
 
-    console.log(`[AI Fix Assistant] Final JSON response generated & saved to database.`);
+    console.log(`[AI Fix Assistant] Final JSON output generated & saved to database.`);
     res.json(parsedResponse);
   } catch (error) {
-    console.error("[AI Fix Assistant] Exception:", error);
-    res.status(500).json({ error: 'Unable to generate AI analysis. Please try again.' });
+    console.error("[AI Fix Assistant] Exception:", error.message);
+    res.status(500).json({ error: error.message || 'Unable to generate AI analysis. Please try again.' });
   }
 });
 
