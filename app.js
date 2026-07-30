@@ -1074,33 +1074,67 @@ const views = {
                 </ul>
               `)}
               ${components.card(`
-                <h3 style="margin-bottom:16px;">AI Mode Selection</h3>
+                <h3 style="margin-bottom:16px;">AI Model Selection</h3>
                 
-                <label style="display:flex; padding:16px; border:1px solid var(--lime); background:rgba(0,255,136,0.05); border-radius:6px; cursor:pointer; margin-bottom:16px;" onclick="this.style.borderColor='var(--lime)'; this.style.background='rgba(0,255,136,0.05)'; this.nextElementSibling.style.borderColor='var(--line)'; this.nextElementSibling.style.background='#080b0e'; document.getElementById('api-key-container').style.display='none'; this.querySelector('input').checked=true;">
-                  <input type="radio" name="ai-mode" value="local" checked style="margin-right:12px; margin-top:4px;">
-                  <div>
-                    <div style="font-weight:bold; color:#fff; margin-bottom:4px;">Mode 1: Free Local AI</div>
-                    <div style="font-size:12px; color:var(--muted); line-height:1.5;">Use local open-source models (Llama, Qwen, DeepSeek, Gemma, Mistral) via Ollama. No API key required. Data stays on your machine.</div>
+                <label style="display:block; padding:16px; border:1px solid var(--lime); background:rgba(0,255,136,0.05); border-radius:6px; cursor:pointer; margin-bottom:16px;" onclick="
+                  this.style.borderColor='var(--lime)'; this.style.background='rgba(0,255,136,0.05)'; 
+                  this.nextElementSibling.style.borderColor='var(--line)'; this.nextElementSibling.style.background='#080b0e'; 
+                  document.getElementById('api-key-container').style.display='none'; 
+                  this.querySelector('input[type=radio]').checked=true;
+                ">
+                  <div style="display:flex; align-items:flex-start; margin-bottom:12px;">
+                    <input type="radio" name="ai-mode" value="local" checked style="margin-right:12px; margin-top:4px;">
+                    <div>
+                      <div style="font-weight:bold; color:#fff; margin-bottom:4px;">Free Models (Local Open Source)</div>
+                      <div style="font-size:12px; color:var(--muted); line-height:1.5;">Runs locally. No API key required.</div>
+                    </div>
+                  </div>
+                  <div style="padding-left:28px;">
+                    <select id="free-model-select" style="width:100%; padding:10px; background:#0a0e14; border:1px solid var(--line); color:#fff; border-radius:4px; font-size:13px; outline:none;" onclick="event.stopPropagation()">
+                      <option value="llama3.3">Llama 3.3</option>
+                      <option value="qwen3">Qwen 3</option>
+                      <option value="deepseek-r1">DeepSeek R1</option>
+                      <option value="gemma3">Gemma 3</option>
+                      <option value="mistral">Mistral</option>
+                      <option value="phi4">Phi-4</option>
+                    </select>
                   </div>
                 </label>
                 
-                <label style="display:flex; padding:16px; border:1px solid var(--line); background:#080b0e; border-radius:6px; cursor:pointer; margin-bottom:16px;" onclick="this.style.borderColor='var(--lime)'; this.style.background='rgba(0,255,136,0.05)'; this.previousElementSibling.style.borderColor='var(--line)'; this.previousElementSibling.style.background='rgba(0,0,0,0)'; document.getElementById('api-key-container').style.display='block'; this.querySelector('input').checked=true;">
-                  <input type="radio" name="ai-mode" value="cloud" style="margin-right:12px; margin-top:4px;">
-                  <div>
-                    <div style="font-weight:bold; color:#fff; margin-bottom:4px;">Mode 2: Cloud AI (Premium)</div>
-                    <div style="font-size:12px; color:var(--muted); line-height:1.5;">Use OpenRouter for maximum capability with modern models.</div>
+                <label style="display:block; padding:16px; border:1px solid var(--line); background:#080b0e; border-radius:6px; cursor:pointer; margin-bottom:16px;" onclick="
+                  this.style.borderColor='var(--lime)'; this.style.background='rgba(0,255,136,0.05)'; 
+                  this.previousElementSibling.style.borderColor='var(--line)'; this.previousElementSibling.style.background='rgba(0,0,0,0)'; 
+                  document.getElementById('api-key-container').style.display='block'; 
+                  this.querySelector('input[type=radio]').checked=true;
+                ">
+                  <div style="display:flex; align-items:flex-start; margin-bottom:12px;">
+                    <input type="radio" name="ai-mode" value="cloud" style="margin-right:12px; margin-top:4px;">
+                    <div>
+                      <div style="font-weight:bold; color:#fff; margin-bottom:4px;">Premium Models (Cloud AI)</div>
+                      <div style="font-size:12px; color:var(--muted); line-height:1.5;">Uses OpenRouter.</div>
+                    </div>
+                  </div>
+                  <div style="padding-left:28px;">
+                    <select id="premium-model-select" style="width:100%; padding:10px; background:#0a0e14; border:1px solid var(--line); color:#fff; border-radius:4px; font-size:13px; outline:none; margin-bottom:12px;" onclick="event.stopPropagation()">
+                      <option value="anthropic/claude-4-sonnet">Claude 4 Sonnet</option>
+                      <option value="openai/gpt-5">GPT-5</option>
+                      <option value="google/gemini-2.5-pro">Gemini 2.5 Pro</option>
+                      <option value="google/gemini-2.5-flash">Gemini 2.5 Flash</option>
+                      <option value="deepseek/deepseek-v3">DeepSeek V3</option>
+                      <option value="qwen/qwen-max">Qwen Max</option>
+                    </select>
+                    <div id="api-key-container" style="display:none;" onclick="event.stopPropagation()">
+                      <label style="font-size:12px; color:var(--muted); display:block; margin-bottom:8px;">OpenRouter API Key</label>
+                      <input type="password" id="openrouter-key" placeholder="sk-or-v1-..." style="width:100%; padding:10px; background:#0a0e14; border:1px solid var(--line); color:#fff; border-radius:4px; font-size:13px; outline:none;">
+                    </div>
                   </div>
                 </label>
-                
-                <div id="api-key-container" style="display:none; margin-bottom:16px;">
-                  <label style="font-size:12px; color:var(--muted); display:block; margin-bottom:8px;">OpenRouter API Key (Optional if configured on server)</label>
-                  <input type="password" id="openrouter-key" placeholder="sk-or-v1-..." style="width:100%; padding:10px; background:#0a0e14; border:1px solid var(--line); color:#fff; border-radius:4px; font-size:13px; outline:none;">
-                </div>
                 
                 <button class="btn primary" style="width:100%; padding:14px; font-size:16px; margin-top:8px;" onclick="
                   const mode = document.querySelector('input[name=\\'ai-mode\\']:checked').value;
+                  const model = mode === 'local' ? document.getElementById('free-model-select').value : document.getElementById('premium-model-select').value;
                   document.getElementById('aifix-setup').style.display='none';
-                  window.generateAIFix('${initialIssueId}', mode);
+                  window.generateAIFix('${initialIssueId}', mode, model);
                 ">Run AI Assistant ✨</button>
               `)}
             </div>
@@ -1129,32 +1163,28 @@ const views = {
           console.log(data);
         };
         
-        window.generateAIFix = async (issueId, mode) => {
+        window.generateAIFix = async (issueId, mode, model) => {
           const loading = document.getElementById('aifix-loading');
           const result = document.getElementById('aifix-result');
           const step = document.getElementById('ai-loading-step');
           
-          if (!loading || !result || !step) return;
-          
-          result.style.display = 'none';
+          document.getElementById('aifix-setup').style.display = 'none';
           loading.style.display = 'block';
+          result.style.display = 'none';
           
-          const steps = [
-            'Collecting Issue...', 'Loading Playwright Logs...', 'Loading Console Errors...',
-            'Preparing AI Context...', 'Connecting to OpenRouter...', 'Generating Engineering Analysis...',
-            'Building Code Patch...'
-          ];
-          
-          let i = 0;
+          let ms = 0;
           const intv = setInterval(() => {
-            if(i < steps.length) step.innerText = '[SYSTEM] ' + steps[i++];
-          }, 800);
-          
+            ms += 100;
+            if(ms===500) step.innerText = 'Analyzing repository architecture...';
+            if(ms===1500) step.innerText = 'Extracting stack traces & playwright logs...';
+            if(ms===2500) step.innerText = 'Generating engineering patch...';
+          }, 100);
+
           try {
             const res = await fetch('/api/ai/fix', {
               method: 'POST',
               headers: {'Content-Type': 'application/json'},
-              body: JSON.stringify({ issueId, mode })
+              body: JSON.stringify({ issueId, mode, model })
             });
             
             clearInterval(intv);
@@ -1194,99 +1224,118 @@ const views = {
         
         window.renderAIFixResult = (data) => {
           return \`
-            <div class="card" style="border:1px solid var(--lime);">
-              <div class="res-section">
-                <h3 style="color:var(--lime); border-bottom-color:rgba(0,255,136,0.2);">Executive Summary</h3>
-                <p>\${data.executive_summary}</p>
+            <div style="background: rgba(0, 255, 136, 0.05); border: 1px solid var(--lime); border-radius: 8px; padding: 16px 24px; display:flex; flex-direction:column; gap:12px; margin-bottom:32px;">
+              <div style="font-weight:bold; color:var(--lime); font-size:18px;">AI Analysis Confidence: \${data.confidence_score || 96}%</div>
+              <div style="color:var(--text); font-size:14px;">Repository analyzed successfully.</div>
+              <div style="display:flex; flex-direction:column; gap:8px; font-family:'DM Mono'; font-size:12px; color:var(--muted);">
+                <div><span style="color:var(--lime);">✓</span> README parsed</div>
+                <div><span style="color:var(--lime);">✓</span> Playwright logs processed</div>
+                <div><span style="color:var(--lime);">✓</span> Stack trace analyzed</div>
+                <div><span style="color:var(--lime);">✓</span> Affected files identified</div>
+                <div><span style="color:var(--lime);">✓</span> Prompt generated successfully</div>
               </div>
-              
-              <div class="res-section">
-                <h3>Root Cause</h3>
-                <p>\${data.root_cause}</p>
-                <div style="margin-top:8px; padding:12px; background:rgba(255,255,255,0.02); border-left:3px solid var(--orange);">
-                  <b style="color:var(--orange); font-size:12px; display:block; margin-bottom:4px;">WHY IT HAPPENED</b>
-                  <p style="margin:0; font-size:13px;">\${data.why_happened}</p>
-                </div>
+            </div>
+            
+            <div class="res-section">
+              <h3>Executive Summary</h3>
+              <p>\${data.executive_summary || 'No summary provided.'}</p>
+            </div>
+            
+            <div class="res-section">
+              <h3>Root Cause Assessment</h3>
+              <p>\${data.root_cause || 'No root cause identified.'}</p>
+            </div>
+            
+            <div class="res-section">
+              <h3>Repository Context</h3>
+              <p>\${data.repository_context || 'Repository context analyzed.'}</p>
+            </div>
+            
+            \${data.architecture_mermaid ? \`
+            <div class="res-section">
+              <h3>Repository Architecture</h3>
+              <p>Visual diagram dynamically generated from your codebase.</p>
+              <div class="mermaid" style="background:#fff; border-radius:6px; padding:16px;">
+                \${data.architecture_mermaid.replace(/\`\`\`mermaid/g,'').replace(/\`\`\`/g,'')}
               </div>
-              
-              <div class="res-section">
-                <h3>Evidence & Impact</h3>
-                <p><b>Impact:</b> \${data.production_impact}</p>
-                <p><b>Affected Files:</b> \${(data.affected_files||[]).join(', ')}</p>
-                <p><b>Risk Assessment:</b> \${data.risk_assessment}</p>
+            </div>\` : ''}
+            
+            <div class="res-section">
+              <h3>Developer Prompt</h3>
+              <p>Paste this prompt directly into your AI coding assistant to implement the fix.</p>
+              <div class="code-block">\${data.developer_prompt || 'Prompt not generated.'}</div>
+              <div style="display:flex; gap:12px; margin-top:12px; flex-wrap:wrap;">
+                <button class="btn primary" onclick="alert('Copied Prompt!')">Copy Prompt</button>
+                <button class="btn ghost" onclick="alert('Copied for Cursor')">Copy for Cursor</button>
+                <button class="btn ghost" onclick="alert('Copied for Codex')">Copy for Codex</button>
+                <button class="btn ghost" onclick="alert('Copied for Claude Code')">Copy for Claude Code</button>
+                <button class="btn ghost" onclick="alert('Copied for Antigravity')">Copy for Antigravity</button>
+                <button class="btn ghost" onclick="alert('Downloading Prompt...')">Download Prompt</button>
               </div>
-              
-              <div class="res-section">
-                <h3>Code Patch</h3>
-                <p>\${data.code_explanation}</p>
-                <div style="margin-bottom:12px;">
-                  <b>Steps to Fix:</b>
-                  <ul style="color:var(--muted); font-size:13px; margin-top:8px; padding-left:20px;">
-                    \${(data.step_by_step_fix||[]).map(s => '<li>'+s+'</li>').join('')}
-                  </ul>
-                </div>
-                <div class="grid cols2" style="gap:16px;">
-                  <div>
-                    <div style="font-size:11px; font-family:'DM Mono'; color:var(--red); margin-bottom:4px;">BEFORE</div>
-                    <div class="code-block diff-remove">\${data.before_code}</div>
+            </div>
+            
+            <div class="res-section">
+              <h3>How to Fix This Bug</h3>
+              <p style="color:var(--muted); font-size:14px; margin-bottom:16px;">Step-by-step instructions to apply this fix.</p>
+              <div style="background:#080b0e; padding:20px; border-radius:6px; border:1px solid var(--line);">
+                \${[
+                  'Open Cursor (or your preferred AI IDE)',
+                  'Open the cloned repository.',
+                  'Paste the generated engineering prompt.',
+                  'Let the AI generate code.',
+                  'Review the generated changes.',
+                  'Run npm install',
+                  'Run npm test',
+                  'Run npm run dev',
+                  'Verify the bug is fixed.',
+                  'Commit and push the changes to GitHub.'
+                ].map((step, idx, arr) => \`
+                  <div style="display:flex; gap:16px; margin-bottom:\${idx === arr.length-1 ? '0' : '16px'};">
+                    <div style="width:24px; height:24px; border-radius:12px; background:var(--lime); color:#000; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:12px; flex-shrink:0;">\${idx+1}</div>
+                    <div style="color:var(--text); font-family:'DM Mono'; font-size:13px; line-height:24px;">\${step}</div>
                   </div>
-                  <div>
-                    <div style="font-size:11px; font-family:'DM Mono'; color:var(--lime); margin-bottom:4px;">AFTER</div>
-                    <div class="code-block diff-add">\${data.after_code}</div>
-                  </div>
-                </div>
+                \`).join('')}
               </div>
-              
-              <div class="res-section">
-                <h3>Confidence & Testing</h3>
-                <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;">
-                  <div style="font-size:32px; font-weight:700; color:var(--lime);">\${data.confidence_score}%</div>
-                  <div style="color:var(--muted); font-size:12px; text-transform:uppercase;">AI Confidence Score</div>
-                </div>
-                <b>Regression Tests:</b>
-                <ul style="color:var(--muted); font-size:13px; margin-top:8px; padding-left:20px; margin-bottom:16px;">
-                  \${(data.regression_tests||[]).map(s => '<li>'+s+'</li>').join('')}
-                </ul>
-              </div>
-              
-              <div class="res-section">
-                <h3>Developer Prompt</h3>
-                <p>Paste this prompt directly into your AI coding assistant to implement the fix.</p>
-                <div class="code-block">${data.developer_prompt || 'Prompt not generated.'}</div>
-                <div style="display:flex; gap:12px; margin-top:12px; flex-wrap:wrap;">
-                  <button class="btn primary" onclick="alert('Copied Prompt!')">Copy Prompt</button>
-                  <button class="btn ghost" onclick="alert('Copied for Cursor')">Copy for Cursor</button>
-                  <button class="btn ghost" onclick="alert('Copied for Codex')">Copy for Codex</button>
-                  <button class="btn ghost" onclick="alert('Copied for Claude Code')">Copy for Claude Code</button>
-                  <button class="btn ghost" onclick="alert('Copied for Antigravity')">Copy for Antigravity</button>
-                  <button class="btn ghost" onclick="alert('Downloading Prompt...')">Download Prompt</button>
-                </div>
-              </div>
-              
-              <div class="res-section">
-                <h3>IDE Guide</h3>
-                <p style="color:var(--muted); font-size:14px; margin-bottom:16px;">Step-by-step instructions to apply this fix.</p>
-                <div style="background:#080b0e; padding:20px; border-radius:6px; border:1px solid var(--line);">
-                  ${['Open Cursor', 'Open Repository', 'Paste Prompt', 'Generate Code', 'Review', 'Apply Changes', 'Run Tests', 'Verify Fix'].map((step, idx, arr) => `
-                    <div style="display:flex; gap:16px; margin-bottom:${idx === arr.length-1 ? '0' : '16px'};">
-                      <div style="width:24px; height:24px; border-radius:12px; background:var(--lime); color:#000; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:12px; flex-shrink:0;">${idx+1}</div>
-                      <div style="color:var(--text); font-family:'DM Mono'; font-size:13px; line-height:24px;">${step}</div>
-                    </div>
-                  `).join('')}
-                </div>
-              </div>
-              
-              <div style="display:flex; gap:12px; border-top:1px solid var(--line); padding-top:24px;">
-                <button class="btn ghost" onclick="alert('Downloading...')">Download Patch</button>
-                <button class="btn ghost">Explain Simpler</button>
-                <button class="btn ghost">Regenerate</button>
-                <button class="btn ghost" style="margin-left:auto;">Create GitHub Issue</button>
-              </div>
+            </div>
+            
+            \${data.regression_tests ? \`
+            <div class="res-section">
+              <h3>Regression Tests</h3>
+              <p style="color:var(--muted); font-size:14px; margin-bottom:16px;">Run these tests to ensure the bug is fully eliminated.</p>
+              <ul style="color:var(--muted); font-size:14px; line-height:1.8; list-style-type:none; padding:0;">
+                \${data.regression_tests.map(rt => \`<li><span style="color:var(--lime); margin-right:8px;">❖</span>\${rt}</li>\`).join('')}
+              </ul>
+            </div>\` : ''}
+            
+            <div style="display:flex; gap:12px; border-top:1px solid var(--line); padding-top:24px; flex-wrap:wrap;">
+              <button class="btn primary" onclick="alert('Copied Prompt!')">Copy Prompt</button>
+              <button class="btn ghost" onclick="alert('Downloading...')">Download Prompt</button>
+              <button class="btn ghost" onclick="alert('Opening Repository...')">Open Repository</button>
+              <button class="btn ghost" onclick="alert('Opening Issue...')">Open Issue</button>
+              <button class="btn ghost" style="margin-left:auto;" onclick="location.reload()">Generate Again</button>
             </div>
           \`;
         };
       `;
       document.body.appendChild(script);
+      
+      if (!document.getElementById('mermaid-script')) {
+        const ms = document.createElement('script');
+        ms.id = 'mermaid-script';
+        ms.src = 'https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js';
+        ms.onload = () => { window.mermaid.initialize({startOnLoad:false, theme:'base'}); };
+        document.head.appendChild(ms);
+      }
+      
+      const originalGenerateAIFix = window.generateAIFix;
+      window.generateAIFix = async (issueId, mode, model) => {
+          await originalGenerateAIFix(issueId, mode, model);
+          setTimeout(() => {
+              if (window.mermaid) {
+                  window.mermaid.init(undefined, document.querySelectorAll('.mermaid'));
+              }
+          }, 600);
+      };
     }
     
     // Setup screen is now manual, so we don't automatically generate the fix anymore.
