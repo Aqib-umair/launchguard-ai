@@ -1,4 +1,5 @@
 import express from 'express';
+import fs from 'fs';
 import cors from 'cors';
 import { initDb, getDb } from './db.js';
 import { runScan } from './scanner.js';
@@ -119,8 +120,8 @@ app.get('/api/evals', async (req, res) => {
 });
 
 app.post('/api/ai/fix', async (req, res) => {
-  const { issueId, mode } = req.body;
-  console.log(`\n[AI Fix Assistant] Incoming request - Issue: ${issueId}, Mode: ${mode}`);
+  const { issueId, mode, model } = req.body;
+  console.log(`\n[AI Fix Assistant] Incoming request - Issue: ${issueId}, Mode: ${mode}, Model: ${model}`);
   
   const db = getDb();
   
@@ -135,40 +136,38 @@ app.post('/api/ai/fix', async (req, res) => {
     console.log(`[AI Fix Assistant] Database lookup for scan ${issue.scan_id}...`);
     const scan = await db.get(`SELECT * FROM scans WHERE id = ?`, [issue.scan_id]);
     
+    let packageJson = '';
+    let readme = '';
+    try {
+      packageJson = fs.readFileSync(path.join(__dirname, 'package.json'), 'utf-8');
+    } catch(e) { console.log('[AI Fix Assistant] package.json not found'); }
+    try {
+      readme = fs.readFileSync(path.join(__dirname, 'README.md'), 'utf-8');
+    } catch(e) { console.log('[AI Fix Assistant] README.md not found'); }
+    
     const prompt = `You are a Principal AI Software Engineer analyzing a production bug.
 Return a JSON object EXACTLY matching this structure:
 {
-  "executive_summary": "High level summary",
-  "root_cause": "Detailed root cause",
-  "why_happened": "Why it occurred",
-  "production_impact": "Impact assessment",
-  "affected_files": ["file1.js"],
+  "executive_summary": "High level summary explaining what is broken, seriousness, and production impact.",
+  "root_cause": "Detailed root cause analyzing why it happened, affected file, and affected component.",
+  "repository_context": "Explain how this repository works. Summarize the README. Detect Frontend, Backend, Database, Framework, Dependencies, Build System. Explain project architecture in beginner-friendly language.",
+  "architecture_mermaid": "Generate a clean visual architecture diagram based on the repository (README, package.json, Frameworks). Return RAW Mermaid markdown ONLY.",
   "code_explanation": "Explanation of fix",
-  "step_by_step_fix": ["Step 1", "Step 2"],
-  "before_code": "code",
-  "after_code": "code",
-  "regression_tests": ["Test 1"],
-  "confidence_score": 95,
-  "risk_assessment": "Low/Med/High risk with reason",
-  "next_actions": ["Action 1"],
   "developer_prompt": "Issue Summary: ... \\n Affected Files: ... \\n Logs: ... \\n Stack Trace: ... \\n Expected Behaviour: ... \\n Acceptance Criteria: ...",
-  "ide_guide": [
-    "Step 1: Open checkout/Confirmation.tsx",
-    "Step 2: Locate confirmOrder()",
-    "Step 3: Replace old code with new code",
-    "Step 4: Save File",
-    "Step 5: Run npm test",
-    "Step 6: Run npm run dev",
-    "Step 7: Verify checkout succeeds"
-  ]
+  "regression_tests": ["Test 1", "Test 2"],
+  "confidence_score": 96
 }
+
+Repository Context:
+package.json:
+${packageJson.slice(0, 1000)}
+README:
+${readme.slice(0, 1000)}
 
 Issue Context:
 Title: ${issue.title}
 Severity: ${issue.severity}
 Component: ${issue.affected_component}
-Before Code:
-${issue.before_code}
 Console Errors: ${issue.console_error || 'None'}
 Network Errors: ${issue.network_error || 'None'}
 Stack Trace:
@@ -183,7 +182,7 @@ ${issue.stack_trace || 'None'}
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'llama3',
+          model: model || 'llama3',
           prompt: prompt,
           format: 'json',
           stream: false
@@ -204,7 +203,7 @@ ${issue.stack_trace || 'None'}
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          model: 'google/gemini-2.5-flash',
+          model: model || 'google/gemini-2.5-flash',
           messages: [{ role: 'user', content: prompt }],
           response_format: { type: 'json_object' }
         })
@@ -230,7 +229,7 @@ ${issue.stack_trace || 'None'}
     const fixId = `FIX-${randomUUID().split('-')[0].toUpperCase()}`;
     await db.run(
       `INSERT INTO ai_fix_requests (id, issue_id, scan_id, model, response_json, execution_time) VALUES (?, ?, ?, ?, ?, ?)`,
-      [fixId, issueId, scan?.id, mode === 'local' ? 'ollama/llama3' : 'google/gemini-2.5-flash', JSON.stringify(parsedResponse), 1200]
+      [fixId, issueId, scan?.id, model || (mode === 'local' ? 'ollama/llama3' : 'google/gemini-2.5-flash'), JSON.stringify(parsedResponse), 1200]
     );
 
     console.log(`[AI Fix Assistant] Final JSON response generated & saved to database.`);
