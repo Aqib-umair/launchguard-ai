@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "build": "echo 'No build required for this vanilla JS app'"
   },
   "dependencies": {
     "@google/genai": "^2.14.0",
