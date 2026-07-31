@@ -1,3 +1,16 @@
+window.onerror = function(msg, url, line, col, err) {
+  console.error('Global window error:', msg, err);
+  if(document.body) document.body.innerHTML += '<div style="padding:40px;font-family:sans-serif;background:rgba(255,0,0,0.9);color:white;position:fixed;top:0;left:0;z-index:9999;width:100%;height:100%;"><h1>Frontend Crash (onerror)</h1><pre>' + (err ? err.stack : msg) + '</pre></div>';
+};
+window.onunhandledrejection = function(e) {
+  console.error('Unhandled promise rejection:', e.reason);
+  if(document.body) document.body.innerHTML += '<div style="padding:40px;font-family:sans-serif;background:rgba(255,0,0,0.9);color:white;position:fixed;top:0;left:0;z-index:9999;width:100%;height:100%;"><h1>Frontend Crash (onunhandledrejection)</h1><pre>' + (e.reason ? e.reason.stack : e.reason) + '</pre></div>';
+};
+
+console.log('app.js loaded');
+document.addEventListener('DOMContentLoaded', () => { console.log('DOMContentLoaded'); });
+
+try {
 // Utilities & Storage
 const store = {
   get: k => localStorage.getItem(k),
@@ -10,11 +23,16 @@ const store = {
 let currentUser = store.getJSON('user');
 
 const api = {
-  get: async (path) => (await fetch(path)).json(),
-  post: async (path, body) => (await fetch(path, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) })).json()
+  get: async (path) => { try { return await (await fetch(path)).json(); } catch(e) { console.error('fetch failed', e); return {}; } },
+  post: async (path, body) => { try { return await (await fetch(path, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) })).json(); } catch(e) { console.error('fetch failed', e); return {}; } }
 };
 
-const app = document.querySelector('#app');
+let app = document.querySelector('#app');
+if (!app) {
+  app = document.createElement('div');
+  app.id = 'app';
+  if(document.body) document.body.appendChild(app);
+}
 
 const navItems = [
   ['report','▦','Overview'],
@@ -184,7 +202,7 @@ window.actions = actions;
 
 // Views
 const views = {
-  landing: () => {
+  landing: () => { console.log("renderLandingPage()");
     app.innerHTML = `<div class="app"><main class="main" style="border-left:0; background: #000; color: #fff;">
       <style>
         .premium-landing { font-family: 'Inter', sans-serif; overflow-x: hidden; background: #000; }
@@ -493,7 +511,7 @@ const views = {
     </div>`;
   },
   
-  report: async () => {
+  report: async () => { console.log("renderDashboard()");
     const data = await api.get('/api/dashboard');
     const greeting = `Hi, ${currentUser ? currentUser.name : 'Developer'} 👋`;
     
@@ -1416,6 +1434,8 @@ const views = {
 
 // Router
 const router = async () => {
+  console.log("router initialization");
+  try {
   let fullHash = location.hash.slice(1) || '';
   let viewName = fullHash.split('?')[0];
   
@@ -1434,6 +1454,7 @@ const router = async () => {
   else if (viewName === 'register') views.auth(true);
   else if (views[viewName]) await views[viewName]();
   else await views.report();
+  } catch(e) { console.error("Router crashed", e); location.hash = ""; }
 };
 
 const bindEvents = () => {
@@ -1447,3 +1468,8 @@ const bindEvents = () => {
 
 window.onhashchange = router;
 router();
+
+} catch (err) {
+  console.error(err);
+  if(document.body) document.body.innerHTML = '<div style="padding:40px;font-family:sans-serif;background:rgba(255,0,0,0.9);color:white;position:fixed;top:0;left:0;z-index:9999;width:100%;height:100%;"><h1>Frontend Crash (top level)</h1><pre>' + err.stack + '</pre></div>';
+}
