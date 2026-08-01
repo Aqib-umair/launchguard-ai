@@ -696,7 +696,9 @@ const views = {
   },
 
   replay: async () => {
-    const flows = await api.get('/api/flows');
+    const scanId = store.get('activeScanId');
+    if (!scanId) return location.hash = 'setup';
+    const flows = await api.get(`/api/broken_flows?scanId=${scanId}`);
     let flowList = flows.map(f => components.card(`
           <div class="split"><b>${f.name}</b> <span class="tag danger">${f.score}% Score</span></div>
           <div style="color:var(--muted); font-size:12px; margin-top:8px;">Failed at: <code>${f.fail_step}</code></div>
@@ -733,7 +735,9 @@ const views = {
   },
 
   shader: async () => {
-    const nodes = await api.get('/api/nodes');
+    const scanId = store.get('activeScanId');
+    if (!scanId) return location.hash = 'setup';
+    const nodes = await api.get(`/api/journeys?scanId=${scanId}`);
     let body = components.head('Flow intelligence', 'AI Website Journey Map', 'Interactive visual map of crawled routes, node health, and page-level telemetry.');
     body += components.progressTracker('shader');
     
@@ -975,7 +979,9 @@ const views = {
   },
 
   eval: async () => {
-    const evals = await api.get('/api/evals');
+    const scanId = store.get('activeScanId');
+    if (!scanId) return location.hash = 'setup';
+    const evals = await api.get(`/api/evals?scanId=${scanId}`);
     let body = components.head('Evaluation suite', 'Dynamic Evals', 'AI-generated assertions testing critical DOM state.');
     body += components.progressTracker('eval');
     
@@ -1003,7 +1009,9 @@ const views = {
   },
 
   issue: async () => {
-    const issues = await api.get('/api/issues');
+    const scanId = store.get('activeScanId');
+    if (!scanId) return location.hash = 'setup';
+    const issues = await api.get(`/api/issues?scanId=${scanId}`);
     let body = components.head('Bug tracker', 'Issues & Alerts', 'AI-detected regressions from Playwright DOM logs.');
     body += components.progressTracker('issue');
     
@@ -1045,9 +1053,11 @@ const views = {
   },
 
   fix: async () => {
+    const scanId = store.get('activeScanId');
+    if (!scanId) return location.hash = 'setup';
     const params = new URLSearchParams(window.location.hash.split('?')[1]);
     const requestedId = params.get('id');
-    const issues = await api.get('/api/issues');
+    const issues = await api.get(`/api/issues?scanId=${scanId}`);
     const targetIssue = requestedId ? issues.find(i => i.id === requestedId) : issues[0];
     
     let body = components.head('Issue Details', `${targetIssue ? targetIssue.id : 'None'}`, 'Comprehensive diagnostics and telemetry for the selected bug.');
@@ -1102,9 +1112,16 @@ const views = {
   },
 
   aifix: async () => {
+    const scanId = store.get('activeScanId');
+    if (!scanId) return location.hash = 'setup';
     const params = new URLSearchParams(window.location.hash.split('?')[1]);
-    const initialIssueId = params.get('id') || '';
+    let initialIssueId = params.get('id') || '';
     const initialMode = params.get('mode') || 'cloud';
+
+    if (!initialIssueId) {
+      const issues = await api.get(`/api/issues?scanId=${scanId}`);
+      if (issues.length > 0) initialIssueId = issues[0].id;
+    }
 
     let body = components.head('OpenRouter AI Agent', 'AI Fix Assistant', 'AI-powered root-cause analysis and automated engineering patch generation.');
     body += components.progressTracker('aifix');

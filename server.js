@@ -48,11 +48,12 @@ app.get('/api/dashboard', asyncHandler(async (req, res) => {
   if (!latestScan) return res.json({ hasScan: false });
   
   const issues = await db.all(`SELECT severity FROM issues WHERE scan_id = ?`, [latestScan.id]);
+  const brokenFlows = await db.all(`SELECT id FROM broken_flows WHERE scan_id = ?`, [latestScan.id]);
   
   res.json({
     hasScan: true,
     score: latestScan.score,
-    brokenFlows: latestScan.broken_flows,
+    brokenFlows: brokenFlows.length,
     apiFailures: latestScan.api_failures,
     performance: latestScan.performance || 98,
     a11y: 0, security: 0, fixes: issues.length, consoleErrs: latestScan.api_failures, networkErrs: latestScan.api_failures,
@@ -109,11 +110,19 @@ app.get('/api/repo/preview', asyncHandler(async (req, res) => {
 
 app.post('/api/scans', asyncHandler(async (req, res) => {
   const { name, repoUrl, deployUrl } = req.body;
-  const id = `scan-${randomUUID().split('-')[0]}`;
   const db = getDb();
+  
+  // Create repository entry
+  const repoId = `repo-${randomUUID().split('-')[0]}`;
   await db.run(
-    `INSERT INTO scans (id, name, repo_url, deploy_url, status) VALUES (?, ?, ?, ?, ?)`,
-    [id, name, repoUrl, deployUrl, 'queued']
+    `INSERT INTO repositories (id, user_id, name, url, framework, language, architecture, readme_summary) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [repoId, 1, repoUrl, repoUrl, 'Unknown', 'Unknown', 'Unknown', '']
+  );
+  
+  const id = `SCAN-LG-2026-${randomUUID().split('-')[0].toUpperCase()}`;
+  await db.run(
+    `INSERT INTO scans (id, repository_id, name, deploy_url, status) VALUES (?, ?, ?, ?, ?)`,
+    [id, repoId, name, deployUrl, 'queued']
   );
   runScan(id, repoUrl, deployUrl);
   res.status(201).json({ id, name, status: 'queued' });
@@ -132,7 +141,7 @@ app.get('/api/scans/:id/stream', asyncHandler(async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
 
   const db = getDb();
-  const scan = await db.get(`SELECT status, error_message, name, repo_url FROM scans WHERE id = ?`, [id]);
+  const scan = await db.get(`SELECT status, error_message, name, repository_id FROM scans WHERE id = ?`, [id]);
   
   if (!scan) {
     res.write(`data: ${JSON.stringify({ log: 'Scan not found.', p: 100, isWarn: true })}\n\n`);
@@ -160,30 +169,31 @@ app.get('/api/scans/:id/stream', asyncHandler(async (req, res) => {
 
 app.get('/api/issues', asyncHandler(async (req, res) => {
   const db = getDb();
-  const sid = await getLatestScanId(db);
+  const sid = req.query.scanId || await getLatestScanId(db);
   const issues = await db.all(`SELECT * FROM issues WHERE scan_id = ? ORDER BY created_at DESC`, [sid]);
   res.json(issues);
 }));
 
-app.get('/api/flows', asyncHandler(async (req, res) => {
+app.get('/api/broken_flows', asyncHandler(async (req, res) => {
   const db = getDb();
-  const sid = await getLatestScanId(db);
-  const flows = await db.all(`SELECT * FROM flows WHERE scan_id = ?`, [sid]);
+  const sid = req.query.scanId || await getLatestScanId(db);
+  const flows = await db.all(`SELECT * FROM broken_flows WHERE scan_id = ?`, [sid]);
   res.json(flows);
 }));
 
-app.get('/api/nodes', asyncHandler(async (req, res) => {
+app.get('/api/journeys', asyncHandler(async (req, res) => {
   const db = getDb();
-  const sid = await getLatestScanId(db);
-  const nodes = await db.all(`SELECT * FROM nodes WHERE scan_id = ?`, [sid]);
+  const sid = req.query.scanId || await getLatestScanId(db);
+  const nodes = await db.all(`SELECT * FROM journeys WHERE scan_id = ?`, [sid]);
   res.json(nodes);
 }));
 
-app.get('/api/evals', asyncHandler(async (req, res) => {
+app.get('/api/ai_fix_plans', asyncHandler(async (req, res) => {
   const db = getDb();
-  const sid = await getLatestScanId(db);
-  const evals = await db.all(`SELECT * FROM evals WHERE scan_id = ?`, [sid]);
-  res.json(evals);
+  const issueId = req.query.issueId;
+  if (!issueId) return res.json([]);
+  const plans = await db.all(`SELECT * FROM ai_fix_plans WHERE issue_id = ?`, [issueId]);
+  res.json(plans);
 }));
 
 app.post('/api/ai/fix', async (req, res) => {

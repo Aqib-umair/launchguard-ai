@@ -214,10 +214,10 @@ export async function runScan(scanId, repoUrl, deployUrl) {
     
     emit("Saving scan", 90);
     
-    // Save UI Nodes if any
+    // Save UI Nodes into journeys if any
     for (const node of nodes) {
       await db.run(
-        `INSERT INTO nodes (id, scan_id, path, status, screenshot, errors, console_errors, network_errors, load_time, a11y_score, perf_score) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO journeys (id, scan_id, path, status, screenshot, errors, console_errors, network_errors, load_time, a11y_score, perf_score) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [node.id, node.scan_id, node.path, node.status, node.screenshot, node.errors, node.console_errors, node.network_errors, node.load_time, node.a11y_score, node.perf_score]
       );
     }
@@ -234,7 +234,7 @@ export async function runScan(scanId, repoUrl, deployUrl) {
     if (aiData && aiData.flows) {
       for (const flow of aiData.flows) {
         await db.run(
-          `INSERT INTO flows (id, scan_id, name, score, fail_step, duration, screenshot, console_error, network_error, dom_snapshot, severity, confidence) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO broken_flows (id, scan_id, name, score, fail_step, duration, screenshot, console_error, network_error, dom_snapshot, severity, confidence) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [flow.id, scanId, flow.name, flow.score, flow.fail_step, flow.duration, finalScreenshot, flow.console_error, flow.network_error, flow.dom_snapshot, flow.severity, flow.confidence]
         );
       }
@@ -249,8 +249,13 @@ export async function runScan(scanId, repoUrl, deployUrl) {
     const repSummary = aiData?.repository_summary || 'Standard web application repository.';
     
     await db.run(
-      `UPDATE scans SET status = 'completed', score = ?, broken_flows = ?, api_failures = ?, architecture = ?, framework = ?, language = ?, repository_summary = ? WHERE id = ?`,
-      [finalScore, brokenFlows, apiFails, arch, framework, language, repSummary, scanId]
+      `UPDATE scans SET status = 'completed', score = ?, api_failures = ?, error_message = NULL WHERE id = ?`,
+      [finalScore, apiFails, scanId]
+    );
+    
+    await db.run(
+      `UPDATE repositories SET framework = ?, language = ?, architecture = ?, readme_summary = ? WHERE id = (SELECT repository_id FROM scans WHERE id = ?)`,
+      [framework, language, arch, repSummary, scanId]
     );
     
     emit("Scan completed", 100);

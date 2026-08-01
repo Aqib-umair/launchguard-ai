@@ -7,12 +7,14 @@ let db;
 
 class MockDb {
   constructor() {
+    this.users = [];
+    this.repositories = [];
     this.scans = [];
+    this.journeys = [];
+    this.broken_flows = [];
     this.issues = [];
-    this.flows = [];
-    this.nodes = [];
-    this.evals = [];
-    this.ai_fix_requests = [];
+    this.ai_fix_plans = [];
+    this.reports = [];
   }
   async exec() {}
   async run(sql, params) { return { lastID: 1 }; }
@@ -43,22 +45,19 @@ export async function initDb() {
 
     await db.exec(`
       CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, email TEXT UNIQUE, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
-      CREATE TABLE IF NOT EXISTS scans (id TEXT PRIMARY KEY, name TEXT, repo_url TEXT, deploy_url TEXT, status TEXT, score INTEGER, broken_flows INTEGER DEFAULT 0, api_failures INTEGER DEFAULT 0, performance INTEGER DEFAULT 0, error_message TEXT, architecture TEXT, framework TEXT, language TEXT, repository_summary TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+      CREATE TABLE IF NOT EXISTS repositories (id TEXT PRIMARY KEY, user_id INTEGER, name TEXT, url TEXT, framework TEXT, language TEXT, architecture TEXT, readme_summary TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+      CREATE TABLE IF NOT EXISTS scans (id TEXT PRIMARY KEY, repository_id TEXT, name TEXT, deploy_url TEXT, status TEXT, score INTEGER, api_failures INTEGER DEFAULT 0, performance INTEGER DEFAULT 0, error_message TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+      CREATE TABLE IF NOT EXISTS journeys (id TEXT PRIMARY KEY, scan_id TEXT, path TEXT, status TEXT, screenshot TEXT, errors TEXT, console_errors TEXT, network_errors TEXT, load_time INTEGER, a11y_score INTEGER, perf_score INTEGER);
+      CREATE TABLE IF NOT EXISTS broken_flows (id TEXT PRIMARY KEY, scan_id TEXT, name TEXT, score INTEGER, fail_step TEXT, duration TEXT, screenshot TEXT, console_error TEXT, network_error TEXT, dom_snapshot TEXT, severity TEXT, confidence INTEGER);
       CREATE TABLE IF NOT EXISTS issues (id TEXT PRIMARY KEY, scan_id TEXT, title TEXT, status TEXT, severity TEXT, area TEXT, root_cause TEXT, patch TEXT, affected_url TEXT, affected_component TEXT, before_code TEXT, after_code TEXT, screenshot TEXT, console_error TEXT, network_error TEXT, stack_trace TEXT, confidence INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
-      CREATE TABLE IF NOT EXISTS flows (id TEXT PRIMARY KEY, scan_id TEXT, name TEXT, score INTEGER, fail_step TEXT, duration TEXT, screenshot TEXT, console_error TEXT, network_error TEXT, dom_snapshot TEXT, severity TEXT, confidence INTEGER);
-      CREATE TABLE IF NOT EXISTS nodes (id TEXT PRIMARY KEY, scan_id TEXT, path TEXT, status TEXT, screenshot TEXT, errors TEXT, console_errors TEXT, network_errors TEXT, load_time INTEGER, a11y_score INTEGER, perf_score INTEGER);
-      CREATE TABLE IF NOT EXISTS evals (id TEXT PRIMARY KEY, scan_id TEXT, name TEXT, target_url TEXT, prompt TEXT, status TEXT, reasoning TEXT);
-      CREATE TABLE IF NOT EXISTS ai_fix_requests (id TEXT PRIMARY KEY, issue_id TEXT, scan_id TEXT, model TEXT, response_json TEXT, execution_time INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+      CREATE TABLE IF NOT EXISTS ai_fix_plans (id TEXT PRIMARY KEY, issue_id TEXT, problem_analysis TEXT, engineering_solution TEXT, developer_prompt TEXT, ide_usage_guide TEXT, model TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+      CREATE TABLE IF NOT EXISTS reports (id TEXT PRIMARY KEY, scan_id TEXT, summary TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
     `);
     
-    // Ensure existing databases get the new columns
+    // Ensure existing databases get the new columns (Graceful upgrade)
     try {
       await db.exec(`
-        ALTER TABLE scans ADD COLUMN error_message TEXT;
-        ALTER TABLE scans ADD COLUMN architecture TEXT;
-        ALTER TABLE scans ADD COLUMN framework TEXT;
-        ALTER TABLE scans ADD COLUMN language TEXT;
-        ALTER TABLE scans ADD COLUMN repository_summary TEXT;
+        ALTER TABLE scans ADD COLUMN repository_id TEXT;
       `);
     } catch (e) {
       // Column likely already exists, ignore
