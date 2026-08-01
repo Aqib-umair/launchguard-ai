@@ -184,8 +184,43 @@ const actions = {
     
     const res = await api.post('/api/scans', { name, repoUrl, deployUrl });
     store.set('activeScanId', res.id);
+    store.setJSON('activeScanData', { name, repoUrl, deployUrl });
     store.set('hasScanned', 'true');
     location.hash = 'progress';
+  },
+  previewRepo: async (e) => {
+    const url = e.target.value.trim();
+    const previewEl = document.getElementById('repoPreview');
+    const nameInput = document.querySelector('input[name="scanName"]');
+    
+    if (!url.includes('github.com')) {
+      if (previewEl) previewEl.innerHTML = '';
+      return;
+    }
+    
+    if (previewEl) previewEl.innerHTML = '<div style="margin-top:12px; padding:12px; border:1px solid var(--line); border-radius:8px; color:var(--muted); font-size:12px;">Detecting repository...</div>';
+    
+    const res = await api.get(`/api/repo/preview?url=${encodeURIComponent(url)}`);
+    if (res.repo && previewEl) {
+      if (nameInput && (!nameInput.value || nameInput.value.includes('Scan'))) {
+        nameInput.value = `${res.repo} Scan`;
+      }
+      previewEl.innerHTML = `
+        <div style="margin-top:12px; padding:16px; border:1px solid var(--lime); border-radius:8px; background:rgba(0, 255, 136, 0.05);">
+          <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+            <span style="font-size:11px; color:var(--muted); text-transform:uppercase;">Repository Detected</span>
+            <span class="tag lime pulse-anim" style="font-size:10px;">Scanning...</span>
+          </div>
+          <div style="font-size:16px; font-weight:600; color:#fff; margin-bottom:12px;">${res.repo}</div>
+          <div style="display:flex; gap:12px; font-size:12px; color:var(--muted);">
+            <div><strong style="color:#fff;">Framework:</strong> ${res.framework}</div>
+            <div><strong style="color:#fff;">Language:</strong> ${res.language}</div>
+          </div>
+        </div>
+      `;
+    } else if (previewEl) {
+      previewEl.innerHTML = '';
+    }
   },
   applyPatch: (issueId, patchContent) => {
     const blob = new Blob([patchContent], { type: "text/plain" });
@@ -582,16 +617,17 @@ const views = {
       ${components.card(`<form class="form" onsubmit="actions.startScan(event)">
         <div class="field">
           <label>Scan name</label>
-          <input name="scanName" required value="Playwright End-to-End Scan">
+          <input name="scanName" required placeholder="e.g. My Repo Scan">
         </div>
         <div class="field">
           <label>GitHub Repository URL (Required)</label>
-          <input name="repoUrl" required value="https://github.com/launchguard/example">
+          <input name="repoUrl" required placeholder="https://github.com/owner/repo" oninput="actions.previewRepo(event)">
           <div style="font-size:12px; color:var(--muted); margin-top:4px;">Used to understand your source code, architecture, dependencies, README, and project structure.</div>
+          <div id="repoPreview"></div>
         </div>
         <div class="field">
           <label>Deployment URL (Optional)</label>
-          <input name="deployUrl" type="url" value="https://example.com">
+          <input name="deployUrl" type="url" placeholder="https://example.com">
           <div style="font-size:12px; color:var(--muted); margin-top:4px;">If provided, LaunchGuard will also perform a live Playwright scan against the deployed application.</div>
         </div>
         <button type="submit" class="btn primary" style="margin-top: 24px; padding: 14px 24px;">Start Scan →</button>
@@ -612,6 +648,7 @@ const views = {
   
   progress: async () => {
     const scanId = store.get('activeScanId');
+    const scanData = store.getJSON('activeScanData') || { name: scanId, repoUrl: '' };
     if (!scanId) return location.hash = 'setup';
     
     let body = components.head('Live execution', 'Scan Command Center', 'Watch autonomous agents navigate and test your application in real-time.', '<span class="tag lime pulse-anim">● AGENT ACTIVE</span>');
@@ -622,7 +659,7 @@ const views = {
         <h3>Active Jobs</h3>
         ${components.card(`<div class="job-item active">
           <div class="job-head"><span class="tag lime">RUNNING</span> <small id="prog-perc">0%</small></div>
-          <b>${scanId}</b><small>Executing via Playwright</small>
+          <b style="word-break: break-all;">${scanData.name || scanId}</b><small>Executing scan pipeline</small>
           <div class="bar" style="margin-top:12px; background:#111820;"><i id="prog-bar" style="width:0%; transition: width 0.5s;"></i></div>
         </div>`, 'lift')}
       </div>

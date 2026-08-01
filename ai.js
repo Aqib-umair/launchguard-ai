@@ -1,13 +1,30 @@
 import { GoogleGenAI } from '@google/genai';
 import { randomUUID } from 'crypto';
 
-export async function analyzeScanData(scanId, url, consoleLogs, networkRequests, nodes, dom) {
+export async function analyzeScanData(scanId, url, consoleLogs, networkRequests, nodes, dom, repoContext) {
   // Hackathon fallback generation logic that guarantees 100% dynamic, realistic data
   // Even if API key is missing, it will build arrays of issues based strictly on captured state.
   
   const issues = [];
   const evals = [];
   const flows = [];
+  
+  let architecture = 'Standard Web Architecture';
+  let repository_summary = 'Analyzed codebase context.';
+  
+  if (repoContext && repoContext.ghRepo) {
+    repository_summary = `Repository ${repoContext.ghRepo} utilizes ${repoContext.framework} and ${repoContext.language}.`;
+    if (repoContext.readme && repoContext.readme.length > 0) {
+      repository_summary += ` Includes detailed README documentation.`;
+    }
+    if (repoContext.framework === 'React' || repoContext.framework === 'Next.js' || repoContext.framework === 'Vue' || repoContext.framework === 'Svelte') {
+      architecture = 'Component-Based UI Architecture';
+    } else if (repoContext.framework.includes('Node') || repoContext.framework === 'Go Backend') {
+      architecture = 'REST API Backend Architecture';
+    } else {
+      architecture = 'Monolithic Web Architecture';
+    }
+  }
   
   // 1. Generate Issues dynamically based on captured network & console errors
   const errors = consoleLogs.filter(l => l.type === 'error');
@@ -98,5 +115,5 @@ export async function analyzeScanData(scanId, url, consoleLogs, networkRequests,
     });
   });
 
-  return { issues, flows, evals };
+  return { issues, flows, evals, architecture, repository_summary };
 }

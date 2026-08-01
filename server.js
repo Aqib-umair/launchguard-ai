@@ -61,6 +61,52 @@ app.get('/api/dashboard', asyncHandler(async (req, res) => {
   });
 }));
 
+app.get('/api/repo/preview', asyncHandler(async (req, res) => {
+  const { url } = req.query;
+  if (!url || !url.includes('github.com')) {
+    return res.json({ repo: '', framework: '', language: 'Unknown' });
+  }
+  try {
+    const parts = url.replace(/\/$/, '').split('/');
+    const repoOwner = parts[parts.length - 2];
+    const repoName = parts[parts.length - 1];
+    
+    // Fallback defaults
+    let repo = `${repoOwner}/${repoName}`;
+    let framework = 'Web API';
+    let language = 'JavaScript';
+    
+    const ghRes = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}`);
+    if (ghRes.ok) {
+      const data = await ghRes.json();
+      if (data.language) language = data.language;
+      repo = data.full_name;
+    }
+    
+    // Quick heuristic for framework from package.json
+    const pkgRes = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}/contents/package.json`);
+    if (pkgRes.ok) {
+      const pkgData = await pkgRes.json();
+      if (pkgData.content) {
+        const pkgJson = Buffer.from(pkgData.content, 'base64').toString();
+        if (pkgJson.includes('"next"')) framework = 'Next.js';
+        else if (pkgJson.includes('"react"')) framework = 'React';
+        else if (pkgJson.includes('"vue"')) framework = 'Vue';
+        else if (pkgJson.includes('"svelte"')) framework = 'Svelte';
+        else if (pkgJson.includes('"express"')) framework = 'Express Node.js';
+      }
+    } else {
+       // if it's Python, say Django or Flask based on quick heuristic?
+       if (language === 'Python') framework = 'Django/Flask';
+       if (language === 'Go') framework = 'Go Backend';
+    }
+    
+    res.json({ repo, framework, language });
+  } catch (err) {
+    res.json({ repo: 'Unknown', framework: 'Unknown', language: 'Unknown' });
+  }
+}));
+
 app.post('/api/scans', asyncHandler(async (req, res) => {
   const { name, repoUrl, deployUrl } = req.body;
   const id = `scan-${randomUUID().split('-')[0]}`;
@@ -86,7 +132,7 @@ app.get('/api/scans/:id/stream', asyncHandler(async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
 
   const db = getDb();
-  const scan = await db.get(`SELECT status, error_message FROM scans WHERE id = ?`, [id]);
+  const scan = await db.get(`SELECT status, error_message, name, repo_url FROM scans WHERE id = ?`, [id]);
   
   if (!scan) {
     res.write(`data: ${JSON.stringify({ log: 'Scan not found.', p: 100, isWarn: true })}\n\n`);

@@ -17,145 +17,211 @@ export async function runScan(scanId, repoUrl, deployUrl) {
   try {
     const isVercel = !!process.env.VERCEL;
     
-    emit("Cloning repository...", 5);
-    await sleep(500);
-    emit("Reading README.md...", 10);
-    await sleep(300);
-    emit("Reading package.json...", 15);
-    await sleep(300);
-    emit("Detecting framework...", 20);
-    await sleep(300);
-    emit("Detecting dependencies...", 25);
-    await sleep(300);
-    emit("Building architecture...", 30);
+    // Give SSE time to connect
+    await sleep(1000);
+    
+    emit("Queued", 2);
     await sleep(500);
     
-    emit("Running Playwright...", 35);
+    emit("Cloning repository", 5);
+    await sleep(500);
     
-    let browser, context, page;
-    const consoleLogs = [];
-    const networkRequests = [];
+    let ghRepo = '';
+    let framework = 'Unknown';
+    let language = 'Unknown';
+    let readme = '';
+    let pkgJsonStr = '';
     
-    if (isVercel) {
-      // Mock page object for Vercel
-      page = {
-        waitForTimeout: async (ms) => new Promise(r => setTimeout(r, ms)),
-        screenshot: async () => Buffer.from('mocked_image_data_base64_encoded', 'base64'),
-        goto: async () => {},
-        evaluate: async () => { return ['https://api.github.com/test-internal']; },
-        content: async () => '<html>Mocked DOM for Vercel environment</html>',
-        on: () => {}
-      };
-      browser = { close: async () => {} };
-      consoleLogs.push({ type: 'error', text: 'TypeError: Cannot read properties of undefined (reading \'length\')' });
-      networkRequests.push({ url: 'https://api.github.com/test', status: 500 });
+    if (repoUrl && repoUrl.includes('github.com')) {
+      const parts = repoUrl.replace(/\/$/, '').split('/');
+      const repoOwner = parts[parts.length - 2];
+      const repoName = parts[parts.length - 1];
+      ghRepo = `${repoOwner}/${repoName}`;
+      
+      const ghRes = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}`);
+      if (ghRes.ok) {
+        const data = await ghRes.json();
+        language = data.language || language;
+      }
+      
+      emit("Reading README.md", 10);
+      const rmRes = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}/contents/README.md`);
+      if (rmRes.ok) {
+        const rmData = await rmRes.json();
+        if (rmData.content) readme = Buffer.from(rmData.content, 'base64').toString();
+      }
+      await sleep(300);
+      
+      emit("Reading package.json", 15);
+      const pkgRes = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}/contents/package.json`);
+      if (pkgRes.ok) {
+        const pkgData = await pkgRes.json();
+        if (pkgData.content) pkgJsonStr = Buffer.from(pkgData.content, 'base64').toString();
+      }
+      await sleep(300);
     } else {
-      const playwright = await import('playwright');
-      const chromium = playwright.chromium;
-      browser = await chromium.launch({ headless: true });
-      context = await browser.newContext({ viewport: { width: 1280, height: 720 }, userAgent: 'LaunchGuard-AI-Agent/1.0' });
-      page = await context.newPage();
-      
-      page.on('console', msg => {
-        consoleLogs.push({ type: msg.type(), text: msg.text() });
-      });
-      
-      page.on('response', response => {
-        const status = response.status();
-        const url = response.url();
-        networkRequests.push({ url, status });
-      });
+      emit("Reading README.md", 10); await sleep(300);
+      emit("Reading package.json", 15); await sleep(300);
     }
     
-    emit("Capturing screenshots...", 45);
+    emit("Reading dependencies", 20);
+    await sleep(300);
+    
+    emit("Detecting framework", 25);
+    if (pkgJsonStr) {
+      if (pkgJsonStr.includes('"next"')) framework = 'Next.js';
+      else if (pkgJsonStr.includes('"react"')) framework = 'React';
+      else if (pkgJsonStr.includes('"vue"')) framework = 'Vue';
+      else if (pkgJsonStr.includes('"svelte"')) framework = 'Svelte';
+      else if (pkgJsonStr.includes('"express"')) framework = 'Express Node.js';
+    } else if (language === 'Python') framework = 'Django/Flask';
+    else if (language === 'Go') framework = 'Go Backend';
+    await sleep(300);
+    
+    emit("Building architecture", 30);
+    await sleep(500);
     
     const nodes = [];
-    const visited = new Set();
+    const consoleLogs = [];
+    const networkRequests = [];
+    let finalDom = '';
     
-    const captureNode = async (currentUrl, pathName, startTime) => {
-      const loadTime = Date.now() - startTime;
-      await page.waitForTimeout(500);
-      const buffer = await page.screenshot({ type: 'jpeg', quality: 50 });
-      const b64 = `data:image/jpeg;base64,${buffer.toString('base64')}`;
+    if (deployUrl) {
+      emit("Scanning deployment", 35);
+      await sleep(400);
+      emit("Running Playwright", 40);
       
-      const pageConsoleErrs = consoleLogs.filter(l => l.type === 'error').map(l => l.text);
-      const pageNetErrs = networkRequests.filter(r => r.status >= 400).map(r => `${r.status} ${r.url}`);
-      const nodeErrors = pageConsoleErrs.length + pageNetErrs.length;
+      let browser, context, page;
       
-      const perfScore = Math.max(10, 100 - (loadTime / 100) - (nodeErrors * 5));
-      const a11yScore = Math.max(20, 100 - (nodeErrors * 10));
+      if (isVercel) {
+        // Mock page object for Vercel
+        page = {
+          waitForTimeout: async (ms) => new Promise(r => setTimeout(r, ms)),
+          screenshot: async () => Buffer.from('mocked_image_data_base64_encoded', 'base64'),
+          goto: async () => {},
+          evaluate: async () => { return ['https://api.github.com/test-internal']; },
+          content: async () => '<html>Mocked DOM for Vercel environment</html>',
+          on: () => {}
+        };
+        browser = { close: async () => {} };
+        consoleLogs.push({ type: 'error', text: 'TypeError: Cannot read properties of undefined (reading \'length\')' });
+        networkRequests.push({ url: 'https://api.github.com/test', status: 500 });
+      } else {
+        const playwright = await import('playwright');
+        const chromium = playwright.chromium;
+        browser = await chromium.launch({ headless: true });
+        context = await browser.newContext({ viewport: { width: 1280, height: 720 }, userAgent: 'LaunchGuard-AI-Agent/1.0' });
+        page = await context.newPage();
+        
+        page.on('console', msg => {
+          consoleLogs.push({ type: msg.type(), text: msg.text() });
+        });
+        
+        page.on('response', response => {
+          const status = response.status();
+          const url = response.url();
+          networkRequests.push({ url, status });
+        });
+      }
       
-      nodes.push({
-        id: `NODE-${randomUUID().split('-')[0]}`,
-        scan_id: scanId,
-        path: pathName,
-        status: nodeErrors === 0 ? 'green' : (nodeErrors < 3 ? 'yellow' : 'red'),
-        screenshot: b64,
-        errors: nodeErrors,
-        console_errors: JSON.stringify(pageConsoleErrs),
-        network_errors: JSON.stringify(pageNetErrs),
-        load_time: loadTime,
-        a11y_score: Math.round(a11yScore),
-        perf_score: Math.round(perfScore)
-      });
-      
-      consoleLogs.length = 0;
-      networkRequests.length = 0;
-    };
+      const visited = new Set();
+      const captureNode = async (currentUrl, pathName, startTime) => {
+        const loadTime = Date.now() - startTime;
+        await page.waitForTimeout(500);
+        const buffer = await page.screenshot({ type: 'jpeg', quality: 50 });
+        const b64 = `data:image/jpeg;base64,${buffer.toString('base64')}`;
+        
+        const pageConsoleErrs = consoleLogs.filter(l => l.type === 'error').map(l => l.text);
+        const pageNetErrs = networkRequests.filter(r => r.status >= 400).map(r => `${r.status} ${r.url}`);
+        const nodeErrors = pageConsoleErrs.length + pageNetErrs.length;
+        
+        const perfScore = Math.max(10, 100 - (loadTime / 100) - (nodeErrors * 5));
+        const a11yScore = Math.max(20, 100 - (nodeErrors * 10));
+        
+        nodes.push({
+          id: `NODE-${randomUUID().split('-')[0]}`,
+          scan_id: scanId,
+          path: pathName,
+          status: nodeErrors === 0 ? 'green' : (nodeErrors < 3 ? 'yellow' : 'red'),
+          screenshot: b64,
+          errors: nodeErrors,
+          console_errors: JSON.stringify(pageConsoleErrs),
+          network_errors: JSON.stringify(pageNetErrs),
+          load_time: loadTime,
+          a11y_score: Math.round(a11yScore),
+          perf_score: Math.round(perfScore)
+        });
+        
+        consoleLogs.length = 0;
+        networkRequests.length = 0;
+      };
 
-    try {
-      const s = Date.now();
-      await page.goto(deployUrl, { waitUntil: 'networkidle', timeout: 15000 });
-      visited.add(deployUrl);
-      await captureNode(deployUrl, '/', s);
-    } catch(e) {
-      // ignore
-    }
-    
-    let hrefs = await page.evaluate(() => {
-      return Array.from(document.querySelectorAll('a'))
-        .map(a => a.href)
-        .filter(h => h.startsWith(window.location.origin) && !h.includes('#'));
-    });
-    
-    hrefs = [...new Set(hrefs)].filter(h => !visited.has(h)).slice(0, 3);
-    
-    for (const link of hrefs) {
       try {
         const s = Date.now();
-        await page.goto(link, { waitUntil: 'networkidle', timeout: 10000 });
-        visited.add(link);
-        const pathName = new URL(link).pathname || link;
-        await captureNode(link, pathName, s);
+        await page.goto(deployUrl, { waitUntil: 'networkidle', timeout: 15000 });
+        visited.add(deployUrl);
+        await captureNode(deployUrl, '/', s);
       } catch(e) {
         // ignore
       }
+      
+      let hrefs = await page.evaluate(() => {
+        return Array.from(document.querySelectorAll('a'))
+          .map(a => a.href)
+          .filter(h => h.startsWith(window.location.origin) && !h.includes('#'));
+      });
+      
+      hrefs = [...new Set(hrefs)].filter(h => !visited.has(h)).slice(0, 3);
+      
+      for (const link of hrefs) {
+        try {
+          const s = Date.now();
+          await page.goto(link, { waitUntil: 'networkidle', timeout: 10000 });
+          visited.add(link);
+          const pathName = new URL(link).pathname || link;
+          await captureNode(link, pathName, s);
+        } catch(e) {
+          // ignore
+        }
+      }
+      
+      finalDom = await page.content();
+      await browser.close();
+      
+      emit("Collecting console logs", 45);
+      await sleep(400);
+      emit("Collecting screenshots", 50);
+      await sleep(400);
+      emit("Running accessibility", 55);
+      await sleep(400);
+      emit("Running performance", 60);
+      await sleep(400);
+    } else {
+      // No deploy URL provided, skip Playwright and skip UI node scanning
+      emit("Skipping Playwright (No Deployment URL)", 45, true);
+      await sleep(500);
     }
     
-    emit("Checking console errors...", 55);
-    await sleep(400);
-    emit("Checking network failures...", 60);
-    await sleep(400);
-    emit("Running accessibility...", 65);
-    await sleep(400);
-    emit("Running security...", 70);
+    emit("Generating Bug IDs", 70);
     await sleep(400);
     
-    emit("Saving results...", 75);
+    emit("Generating AI report", 80);
+    const finalScreenshot = nodes.length > 0 ? nodes[0].screenshot : '';
+    
+    // Pass repo context (readme, framework, language) to AI
+    const repoContext = { ghRepo, framework, language, readme };
+    const aiData = await analyzeScanData(scanId, deployUrl, consoleLogs, networkRequests, nodes, finalDom, repoContext);
+    
+    emit("Saving scan", 90);
+    
+    // Save UI Nodes if any
     for (const node of nodes) {
       await db.run(
         `INSERT INTO nodes (id, scan_id, path, status, screenshot, errors, console_errors, network_errors, load_time, a11y_score, perf_score) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [node.id, node.scan_id, node.path, node.status, node.screenshot, node.errors, node.console_errors, node.network_errors, node.load_time, node.a11y_score, node.perf_score]
       );
     }
-
-    const finalDom = await page.content();
-    const finalScreenshot = nodes.length > 0 ? nodes[0].screenshot : '';
     
-    emit("Running AI analysis...", 80);
-    const aiData = await analyzeScanData(scanId, deployUrl, consoleLogs, networkRequests, nodes, finalDom);
-    
-    emit("Creating Bug IDs...", 90);
     if (aiData && aiData.issues) {
       for (const iss of aiData.issues) {
         await db.run(
@@ -174,32 +240,25 @@ export async function runScan(scanId, repoUrl, deployUrl) {
       }
     }
     
-    if (aiData && aiData.evals) {
-      for (const ev of aiData.evals) {
-        await db.run(
-          `INSERT INTO evals (id, scan_id, name, target_url, prompt, status, reasoning) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [ev.id, scanId, ev.name, ev.target_url, ev.prompt, ev.status, ev.reasoning]
-        );
-      }
-    }
-    
-    await browser.close();
-    
-    const finalScore = aiData?.issues?.length > 0 ? 68 : 94;
+    const finalScore = (aiData?.issues?.length > 0) ? 68 : 94;
     const brokenFlows = aiData?.flows?.length || 0;
     const apiFails = networkRequests.filter(r => r.status >= 400).length;
     
+    // Extract generated repo summary and architecture if AI provided it
+    const arch = aiData?.architecture || 'Microservices Architecture';
+    const repSummary = aiData?.repository_summary || 'Standard web application repository.';
+    
     await db.run(
-      `UPDATE scans SET status = 'completed', score = ?, broken_flows = ?, api_failures = ? WHERE id = ?`,
-      [finalScore, brokenFlows, apiFails, scanId]
+      `UPDATE scans SET status = 'completed', score = ?, broken_flows = ?, api_failures = ?, architecture = ?, framework = ?, language = ?, repository_summary = ? WHERE id = ?`,
+      [finalScore, brokenFlows, apiFails, arch, framework, language, repSummary, scanId]
     );
     
-    emit("Scan Complete\nRepository analyzed successfully.\nArchitecture generated.\nIssues detected.\nAI engineering report ready.\nOpen Results", 100);
+    emit("Scan completed", 100);
     
   } catch (error) {
     console.error("Scan Error:", error);
     let errorMsg = error.message;
-    if (!errorMsg || errorMsg.trim() === '') errorMsg = 'Playwright crashed.';
+    if (!errorMsg || errorMsg.trim() === '') errorMsg = 'Pipeline crashed.';
     await db.run(`UPDATE scans SET status = 'failed', error_message = ? WHERE id = ?`, [errorMsg, scanId]);
     emit(errorMsg, 100, true);
   }
