@@ -67,10 +67,10 @@ app.post('/api/scans', asyncHandler(async (req, res) => {
   const db = getDb();
   await db.run(
     `INSERT INTO scans (id, name, repo_url, deploy_url, status) VALUES (?, ?, ?, ?, ?)`,
-    [id, name, repoUrl, deployUrl, 'running']
+    [id, name, repoUrl, deployUrl, 'queued']
   );
   runScan(id, repoUrl, deployUrl);
-  res.status(201).json({ id, name, status: 'running' });
+  res.status(201).json({ id, name, status: 'queued' });
 }));
 
 app.get('/api/scans', asyncHandler(async (req, res) => {
@@ -86,10 +86,21 @@ app.get('/api/scans/:id/stream', asyncHandler(async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
 
   const db = getDb();
-  const scan = await db.get(`SELECT status FROM scans WHERE id = ?`, [id]);
+  const scan = await db.get(`SELECT status, error_message FROM scans WHERE id = ?`, [id]);
   
-  if (!scan || scan.status !== 'running') {
-    res.write(`data: ${JSON.stringify({ log: 'Scan already completed or failed.', p: 100, isWarn: scan?.status === 'failed' })}\n\n`);
+  if (!scan) {
+    res.write(`data: ${JSON.stringify({ log: 'Scan not found.', p: 100, isWarn: true })}\n\n`);
+    return res.end();
+  }
+  
+  if (scan.status === 'completed') {
+    res.write(`data: ${JSON.stringify({ log: 'Scan Complete\nRepository analyzed successfully.\nArchitecture generated.\nIssues detected.\nAI engineering report ready.\nOpen Results', p: 100, isWarn: false })}\n\n`);
+    return res.end();
+  }
+
+  if (scan.status === 'failed') {
+    const errorLog = scan.error_message ? scan.error_message : 'Unknown error occurred.';
+    res.write(`data: ${JSON.stringify({ log: errorLog, p: 100, isWarn: true })}\n\n`);
     return res.end();
   }
 

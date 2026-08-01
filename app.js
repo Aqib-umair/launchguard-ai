@@ -645,6 +645,7 @@ const views = {
       const termEl = document.createElement('div');
       termEl.className = st.isWarn ? 'warn' : (st.log.includes('✓') ? 'ok' : 'cyan');
       termEl.className += ' anim-slide-in';
+      termEl.style.whiteSpace = 'pre-wrap';
       termEl.innerText = st.log;
       const tw = document.getElementById('prog-term');
       tw.appendChild(termEl);
@@ -652,7 +653,7 @@ const views = {
       
       if (st.p >= 100) {
         source.close();
-        setTimeout(() => { location.hash = 'report'; }, 3000);
+        setTimeout(() => { location.hash = 'issue'; }, 3000);
       }
     };
   },
