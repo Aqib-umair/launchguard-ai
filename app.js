@@ -696,6 +696,7 @@ const views = {
       
       if (st.p >= 100) {
         source.close();
+        setTimeout(() => location.hash = 'replay', 1500);
       }
     };
   },
@@ -1194,39 +1195,31 @@ const views = {
                 <label style="display:block; padding:16px; border:1px solid var(--lime); background:rgba(0,255,136,0.05); border-radius:6px; cursor:pointer; margin-bottom:16px;" onclick="
                   this.style.borderColor='var(--lime)'; this.style.background='rgba(0,255,136,0.05)'; 
                   this.nextElementSibling.style.borderColor='var(--line)'; this.nextElementSibling.style.background='#080b0e'; 
+                  this.nextElementSibling.nextElementSibling.style.borderColor='var(--line)'; this.nextElementSibling.nextElementSibling.style.background='#080b0e'; 
                   document.getElementById('api-key-container').style.display='none'; 
                   this.querySelector('input[type=radio]').checked=true;
                 ">
                   <div style="display:flex; align-items:flex-start; margin-bottom:12px;">
-                    <input type="radio" name="ai-mode" value="local" checked style="margin-right:12px; margin-top:4px;">
+                    <input type="radio" name="ai-mode" value="cloud-free" checked style="margin-right:12px; margin-top:4px;">
                     <div>
-                      <div style="font-weight:bold; color:#fff; margin-bottom:4px;">Free Models (Local Open Source)</div>
-                      <div style="font-size:12px; color:var(--muted); line-height:1.5;">Runs locally. No API key required.</div>
+                      <div style="font-weight:bold; color:#fff; margin-bottom:4px;">Free Models (Cloud AI)</div>
+                      <div style="font-size:12px; color:var(--muted); line-height:1.5;">Runs securely in the cloud. No API key or local setup required.</div>
                     </div>
                   </div>
-                  <div style="padding-left:28px;">
-                    <select id="free-model-select" style="width:100%; padding:10px; background:#0a0e14; border:1px solid var(--line); color:#fff; border-radius:4px; font-size:13px; outline:none;" onclick="event.stopPropagation()">
-                      <option value="llama3.3">Llama 3.3</option>
-                      <option value="qwen3">Qwen 3</option>
-                      <option value="deepseek-r1">DeepSeek R1</option>
-                      <option value="gemma3">Gemma 3</option>
-                      <option value="mistral">Mistral</option>
-                      <option value="phi4">Phi-4</option>
-                    </select>
-                  </div>
                 </label>
-                
+
                 <label style="display:block; padding:16px; border:1px solid var(--line); background:#080b0e; border-radius:6px; cursor:pointer; margin-bottom:16px;" onclick="
                   this.style.borderColor='var(--lime)'; this.style.background='rgba(0,255,136,0.05)'; 
                   this.previousElementSibling.style.borderColor='var(--line)'; this.previousElementSibling.style.background='rgba(0,0,0,0)'; 
+                  this.nextElementSibling.style.borderColor='var(--line)'; this.nextElementSibling.style.background='#080b0e'; 
                   document.getElementById('api-key-container').style.display='block'; 
                   this.querySelector('input[type=radio]').checked=true;
                 ">
                   <div style="display:flex; align-items:flex-start; margin-bottom:12px;">
                     <input type="radio" name="ai-mode" value="cloud" style="margin-right:12px; margin-top:4px;">
                     <div>
-                      <div style="font-weight:bold; color:#fff; margin-bottom:4px;">Premium Models (Cloud AI)</div>
-                      <div style="font-size:12px; color:var(--muted); line-height:1.5;">Uses OpenRouter.</div>
+                      <div style="font-weight:bold; color:#fff; margin-bottom:4px;">Premium Models (OpenRouter)</div>
+                      <div style="font-size:12px; color:var(--muted); line-height:1.5;">Bring your own API key for maximum power.</div>
                     </div>
                   </div>
                   <div style="padding-left:28px;">
@@ -1234,9 +1227,6 @@ const views = {
                       <option value="anthropic/claude-4-sonnet">Claude 4 Sonnet</option>
                       <option value="openai/gpt-5">GPT-5</option>
                       <option value="google/gemini-2.5-pro">Gemini 2.5 Pro</option>
-                      <option value="google/gemini-2.5-flash">Gemini 2.5 Flash</option>
-                      <option value="deepseek/deepseek-v3">DeepSeek V3</option>
-                      <option value="qwen/qwen-max">Qwen Max</option>
                     </select>
                     <div id="api-key-container" style="display:none;" onclick="event.stopPropagation()">
                       <label style="font-size:12px; color:var(--muted); display:block; margin-bottom:8px;">OpenRouter API Key</label>
@@ -1244,10 +1234,26 @@ const views = {
                     </div>
                   </div>
                 </label>
+
+                <label style="display:block; padding:16px; border:1px solid var(--line); background:#080b0e; border-radius:6px; cursor:pointer; margin-bottom:16px;" onclick="
+                  this.style.borderColor='var(--lime)'; this.style.background='rgba(0,255,136,0.05)'; 
+                  this.previousElementSibling.style.borderColor='var(--line)'; this.previousElementSibling.style.background='rgba(0,0,0,0)'; 
+                  this.previousElementSibling.previousElementSibling.style.borderColor='var(--line)'; this.previousElementSibling.previousElementSibling.style.background='rgba(0,0,0,0)'; 
+                  document.getElementById('api-key-container').style.display='none'; 
+                  this.querySelector('input[type=radio]').checked=true;
+                ">
+                  <div style="display:flex; align-items:flex-start; margin-bottom:12px;">
+                    <input type="radio" name="ai-mode" value="local" style="margin-right:12px; margin-top:4px;">
+                    <div>
+                      <div style="font-weight:bold; color:#fff; margin-bottom:4px;">Local Models (Ollama)</div>
+                      <div style="font-size:12px; color:var(--muted); line-height:1.5;">Runs locally on your machine via Ollama.</div>
+                    </div>
+                  </div>
+                </label>
                 
                 <button class="btn primary" style="width:100%; padding:14px; font-size:16px; margin-top:8px;" onclick="
                   const mode = document.querySelector('input[name=\\'ai-mode\\']:checked').value;
-                  const model = mode === 'local' ? document.getElementById('free-model-select').value : document.getElementById('premium-model-select').value;
+                  const model = mode === 'cloud' ? document.getElementById('premium-model-select').value : (mode === 'cloud-free' ? 'gemini-2.5-flash' : 'llama3.3');
                   const apiKey = document.getElementById('openrouter-key') ? document.getElementById('openrouter-key').value : '';
                   document.getElementById('aifix-setup').style.display='none';
                   window.generateAIFix('${initialIssueId}', mode, model, apiKey);
@@ -1283,6 +1289,22 @@ const views = {
           const loading = document.getElementById('aifix-loading');
           const result = document.getElementById('aifix-result');
           const step = document.getElementById('ai-loading-step');
+          
+          if (mode === 'local') {
+            try {
+              const pingRes = await fetch('/api/ollama/ping');
+              if (!pingRes.ok) throw new Error();
+            } catch (e) {
+              const mainContainer = document.querySelector('#aifix-setup').parentNode;
+              mainContainer.innerHTML = \`
+                <div style="text-align:center; padding: 40px; background:rgba(255,77,77,0.05); border:1px solid rgba(255,77,77,0.2); border-radius:8px; margin-top:40px;">
+                  <h2 style="color:var(--red); margin-bottom:16px;">AI Analysis Failed</h2>
+                  <p style="color:var(--muted); margin-bottom:32px;">Reason: Local AI is unavailable because Ollama is not running on port 11434.</p>
+                  <button class="btn ghost" onclick="location.hash='aifix?id=\${issueId}'" style="border:1px solid var(--line);">Retry or Change AI Model</button>
+                </div>\`;
+              return;
+            }
+          }
           
           document.getElementById('aifix-setup').style.display = 'none';
           loading.style.display = 'block';
