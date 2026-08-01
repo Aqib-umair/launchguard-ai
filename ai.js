@@ -105,7 +105,7 @@ function fallbackGeneration(scanId, url, telemetry, dom, repoContext) {
   let repository_summary = 'Analyzed codebase context.';
   
   if (repoContext && repoContext.ghRepo) {
-    repository_summary = \`Repository \${repoContext.ghRepo} utilizes \${repoContext.framework} and \${repoContext.language}.\`;
+    repository_summary = `Repository ${repoContext.ghRepo} utilizes ${repoContext.framework} and ${repoContext.language}.`;
     if (repoContext.framework === 'React' || repoContext.framework === 'Next.js' || repoContext.framework === 'Vue' || repoContext.framework === 'Svelte') {
       architecture = 'Component-Based UI Architecture';
     }
@@ -116,19 +116,19 @@ function fallbackGeneration(scanId, url, telemetry, dom, repoContext) {
   
   if (exceptions.length > 0 || errors.length > 0) {
     const errText = exceptions.length > 0 ? exceptions[0].error : errors[0].text;
-    const stack = exceptions.length > 0 ? exceptions[0].stack : 'TypeError: Cannot read properties of undefined\\n  at renderApp (app.js:45)';
+    const stack = exceptions.length > 0 ? exceptions[0].stack : 'TypeError: Cannot read properties of undefined\n  at renderApp (app.js:45)';
     issues.push({
-      id: \`BUG-LG-2026-\${Math.floor(Math.random()*10000).toString().padStart(4, '0')}\`,
+      id: `BUG-LG-2026-${Math.floor(Math.random()*10000).toString().padStart(4, '0')}`,
       title: errText.substring(0, 40) + "...",
       status: 'Open',
       severity: 'High',
       area: 'Frontend Execution',
-      root_cause: \`The application threw an uncaught error: \${errText}.\`,
-      patch: \`@@ -45,3 +45,5 @@\\n- function renderApp(data) {\\n-   document.title = data.title;\\n+ function renderApp(data) {\\n+   if (!data) return;\\n+   document.title = data?.title || 'Fallback';\`,
+      root_cause: `The application threw an uncaught error: ${errText}.`,
+      patch: `@@ -45,3 +45,5 @@\n- function renderApp(data) {\n-   document.title = data.title;\n+ function renderApp(data) {\n+   if (!data) return;\n+   document.title = data?.title || 'Fallback';`,
       affected_url: url,
       affected_component: 'Application Root',
-      before_code: \`function renderApp(data) {\\n  document.title = data.title;\\n}\`,
-      after_code: \`function renderApp(data) {\\n  if (!data) return;\\n  document.title = data?.title || 'Fallback';\\n}\`,
+      before_code: `function renderApp(data) {\n  document.title = data.title;\n}`,
+      after_code: `function renderApp(data) {\n  if (!data) return;\n  document.title = data?.title || 'Fallback';\n}`,
       console_error: errText,
       network_error: null,
       stack_trace: stack,
@@ -139,32 +139,32 @@ function fallbackGeneration(scanId, url, telemetry, dom, repoContext) {
     const axe = telemetry.axeViolations;
     if (axe.length > 0) {
       issues.push({
-        id: \`BUG-LG-2026-\${Math.floor(Math.random()*10000).toString().padStart(4, '0')}\`,
-        title: \`Accessibility: \${axe[0].description}\`,
+        id: `BUG-LG-2026-${Math.floor(Math.random()*10000).toString().padStart(4, '0')}`,
+        title: `Accessibility: ${axe[0].description}`,
         status: 'Open',
         severity: axe[0].impact === 'critical' || axe[0].impact === 'serious' ? 'Medium' : 'Low',
         area: 'UI/UX Accessibility',
-        root_cause: \`Axe detected a \${axe[0].impact} accessibility violation: \${axe[0].description}.\`,
-        patch: \`<!-- Example Fix for \${axe[0].id} -->\`,
+        root_cause: `Axe detected a ${axe[0].impact} accessibility violation: ${axe[0].description}.`,
+        patch: `<!-- Example Fix for ${axe[0].id} -->`,
         affected_url: axe[0].url || url,
         affected_component: axe[0].id,
-        before_code: \`<element aria-hidden="true" tabindex="0">\`,
-        after_code: \`<element aria-hidden="false" tabindex="0">\`,
+        before_code: `<element aria-hidden="true" tabindex="0">`,
+        after_code: `<element aria-hidden="false" tabindex="0">`,
         console_error: null, network_error: null, stack_trace: null, confidence: 99
       });
     } else {
       issues.push({
-        id: \`BUG-LG-2026-\${Math.floor(Math.random()*10000).toString().padStart(4, '0')}\`,
-        title: \`Potential Layout Shift on Navigation\`,
+        id: `BUG-LG-2026-${Math.floor(Math.random()*10000).toString().padStart(4, '0')}`,
+        title: `Potential Layout Shift on Navigation`,
         status: 'Open',
         severity: 'Low',
         area: 'UI/UX',
-        root_cause: \`The AI agent detected a Cumulative Layout Shift (CLS) during page traversal on \${url}.\`,
-        patch: \`@@ -1,3 +1,3 @@\\n- .hero-img { width: 100%; }\\n+ .hero-img { width: 100%; min-height: 400px; }\`,
+        root_cause: `The AI agent detected a Cumulative Layout Shift (CLS) during page traversal on ${url}.`,
+        patch: `@@ -1,3 +1,3 @@\n- .hero-img { width: 100%; }\n+ .hero-img { width: 100%; min-height: 400px; }`,
         affected_url: url,
         affected_component: 'Hero Section',
-        before_code: \`.hero-img { width: 100%; }\`,
-        after_code: \`.hero-img { width: 100%; min-height: 400px; }\`,
+        before_code: `.hero-img { width: 100%; }`,
+        after_code: `.hero-img { width: 100%; min-height: 400px; }`,
         console_error: null, network_error: null, stack_trace: null, confidence: 82
       });
     }
@@ -172,14 +172,14 @@ function fallbackGeneration(scanId, url, telemetry, dom, repoContext) {
 
   if (issues.length > 0) {
     flows.push({
-      id: \`FLOW-\${randomUUID().split('-')[0].toUpperCase()}\`,
+      id: `FLOW-${randomUUID().split('-')[0].toUpperCase()}`,
       name: 'Automated Crawl Path - Encountered Regression',
       score: 55,
       fail_step: issues[0].affected_component || 'Page Load',
       duration: '14.2s',
       console_error: issues[0].console_error,
       network_error: issues[0].network_error,
-      dom_snapshot: \`<div id="app"><div class="error-boundary">Exception Handled</div></div>\`,
+      dom_snapshot: `<div id="app"><div class="error-boundary">Exception Handled</div></div>`,
       severity: issues[0].severity,
       confidence: issues[0].confidence
     });
@@ -187,12 +187,12 @@ function fallbackGeneration(scanId, url, telemetry, dom, repoContext) {
   
   telemetry.nodes.forEach(node => {
     evals.push({
-      id: \`EVAL-\${randomUUID().split('-')[0].toUpperCase()}\`,
-      name: \`Verify State on \${node.path}\`,
+      id: `EVAL-${randomUUID().split('-')[0].toUpperCase()}`,
+      name: `Verify State on ${node.path}`,
       target_url: node.path,
-      prompt: \`Ensure that the main content is fully loaded on \${node.path} and no error modals are blocking user interaction.\`,
+      prompt: `Ensure that the main content is fully loaded on ${node.path} and no error modals are blocking user interaction.`,
       status: node.errors > 0 ? 'FAILED' : 'PASSED',
-      reasoning: node.errors > 0 ? \`AI visual regression detected \${node.errors} errors affecting DOM layout on \${node.path}.\` : \`AI confirmed stable layout and successful fetch on \${node.path}.\`
+      reasoning: node.errors > 0 ? `AI visual regression detected ${node.errors} errors affecting DOM layout on ${node.path}.` : `AI confirmed stable layout and successful fetch on ${node.path}.`
     });
   });
 

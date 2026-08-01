@@ -207,14 +207,20 @@ const actions = {
       }
       previewEl.innerHTML = `
         <div style="margin-top:12px; padding:16px; border:1px solid var(--lime); border-radius:8px; background:rgba(0, 255, 136, 0.05);">
-          <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
-            <span style="font-size:11px; color:var(--muted); text-transform:uppercase;">Repository Detected</span>
-            <span class="tag lime pulse-anim" style="font-size:10px;">Scanning...</span>
+          <div style="display:flex; justify-content:space-between; margin-bottom:12px;">
+            <span style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px;">Repository Detected</span>
+            <span class="tag lime pulse-anim" style="font-size:10px;">Ready</span>
           </div>
-          <div style="font-size:16px; font-weight:600; color:#fff; margin-bottom:12px;">${res.repo}</div>
-          <div style="display:flex; gap:12px; font-size:12px; color:var(--muted);">
-            <div><strong style="color:#fff;">Framework:</strong> ${res.framework}</div>
-            <div><strong style="color:#fff;">Language:</strong> ${res.language}</div>
+          <div style="font-size:18px; font-weight:600; color:#fff; margin-bottom:4px;">${res.repo}</div>
+          <div style="font-size:13px; color:var(--muted); margin-bottom:16px;">Branch: <strong style="color:#fff;">${res.branch}</strong></div>
+          
+          <div style="display:flex; flex-wrap:wrap; gap:8px;">
+            <span class="tag" style="background:#222; border:1px solid #333;"><strong style="color:var(--lime);">Lang:</strong> ${res.language}</span>
+            <span class="tag" style="background:#222; border:1px solid #333;"><strong style="color:var(--lime);">FW:</strong> ${res.framework}</span>
+            <span class="tag" style="background:#222; border:1px solid #333;"><strong style="color:var(--lime);">Pkg:</strong> ${res.packageManager}</span>
+            <span class="tag" style="background:#222; border:1px solid #333;"><strong style="color:var(--lime);">Test:</strong> ${res.testing}</span>
+            <span class="tag" style="background:#222; border:1px solid #333;"><strong style="color:var(--lime);">DB:</strong> ${res.database}</span>
+            <span class="tag" style="background:#222; border:1px solid #333;"><strong style="color:var(--lime);">Deploy:</strong> ${res.deployment}</span>
           </div>
         </div>
       `;

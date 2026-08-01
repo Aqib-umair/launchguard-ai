@@ -59,45 +59,87 @@ app.get('/api/dashboard', asyncHandler(async (req, res) => {
 app.get('/api/repo/preview', asyncHandler(async (req, res) => {
   const { url } = req.query;
   if (!url || !url.includes('github.com')) {
-    return res.json({ repo: '', framework: '', language: 'Unknown' });
+    return res.json({ repo: '', owner: '', name: '', branch: '', language: 'Unknown', framework: 'Web API', packageManager: 'Unknown', testing: 'None', database: 'None', deployment: 'Unknown' });
   }
   try {
     const parts = url.replace(/\/$/, '').split('/');
     const repoOwner = parts[parts.length - 2];
     const repoName = parts[parts.length - 1];
     
-    // Fallback defaults
     let repo = `${repoOwner}/${repoName}`;
-    let framework = 'Web API';
+    let owner = repoOwner;
+    let name = repoName;
+    let branch = 'main';
     let language = 'JavaScript';
+    let framework = 'Web API';
+    let packageManager = 'Unknown';
+    let testing = 'None';
+    let database = 'None';
+    let deployment = 'Unknown';
     
+    // Fetch base repository metadata
     const ghRes = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}`);
     if (ghRes.ok) {
       const data = await ghRes.json();
       if (data.language) language = data.language;
       repo = data.full_name;
+      branch = data.default_branch || 'main';
     }
     
-    // Quick heuristic for framework from package.json
+    // Fetch repository tree to look for lock files and config files
+    const treeRes = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}/git/trees/${branch}?recursive=1`);
+    if (treeRes.ok) {
+      const treeData = await treeRes.json();
+      if (treeData.tree) {
+        const files = treeData.tree.map(t => t.path);
+        
+        if (files.includes('package-lock.json')) packageManager = 'npm';
+        else if (files.includes('yarn.lock')) packageManager = 'Yarn';
+        else if (files.includes('pnpm-lock.yaml')) packageManager = 'pnpm';
+        else if (files.includes('Pipfile.lock') || files.includes('requirements.txt')) packageManager = 'pip';
+        else if (files.includes('go.sum')) packageManager = 'go mod';
+        
+        if (files.some(f => f.includes('prisma/schema.prisma'))) database = 'Prisma';
+        else if (files.includes('drizzle.config.ts')) database = 'Drizzle ORM';
+        else if (files.includes('mongoose.js')) database = 'MongoDB';
+        else if (files.some(f => f.includes('models.py'))) database = 'SQLAlchemy / Django ORM';
+        
+        if (files.includes('jest.config.js')) testing = 'Jest';
+        else if (files.includes('vitest.config.ts')) testing = 'Vitest';
+        else if (files.includes('cypress.config.js') || files.includes('cypress.json')) testing = 'Cypress';
+        else if (files.includes('playwright.config.ts') || files.includes('playwright.config.js')) testing = 'Playwright';
+        
+        if (files.includes('vercel.json')) deployment = 'Vercel';
+        else if (files.includes('netlify.toml')) deployment = 'Netlify';
+        else if (files.includes('docker-compose.yml') || files.includes('Dockerfile')) deployment = 'Docker';
+        else if (files.some(f => f.includes('.github/workflows'))) deployment = 'GitHub Actions';
+      }
+    }
+    
+    // Read package.json to refine framework and testing if it's JS/TS
     const pkgRes = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}/contents/package.json`);
     if (pkgRes.ok) {
       const pkgData = await pkgRes.json();
       if (pkgData.content) {
         const pkgJson = Buffer.from(pkgData.content, 'base64').toString();
         if (pkgJson.includes('"next"')) framework = 'Next.js';
+        else if (pkgJson.includes('"nuxt"')) framework = 'Nuxt.js';
         else if (pkgJson.includes('"react"')) framework = 'React';
         else if (pkgJson.includes('"vue"')) framework = 'Vue';
         else if (pkgJson.includes('"svelte"')) framework = 'Svelte';
         else if (pkgJson.includes('"express"')) framework = 'Express Node.js';
+        
+        if (pkgJson.includes('"mongoose"')) database = 'MongoDB';
+        if (pkgJson.includes('"pg"')) database = 'PostgreSQL';
       }
     } else {
        if (language === 'Python') framework = 'Django/Flask';
        if (language === 'Go') framework = 'Go Backend';
     }
     
-    res.json({ repo, framework, language });
+    res.json({ repo, owner, name, branch, framework, language, packageManager, testing, database, deployment });
   } catch (err) {
-    res.json({ repo: 'Unknown', framework: 'Unknown', language: 'Unknown' });
+    res.json({ repo: 'Unknown', owner: '', name: '', branch: '', framework: 'Unknown', language: 'Unknown', packageManager: 'Unknown', testing: 'None', database: 'None', deployment: 'Unknown' });
   }
 }));
 

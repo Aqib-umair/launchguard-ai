@@ -19,11 +19,7 @@ export async function runScan(scanId, repoUrl, deployUrl) {
     
     // Give SSE time to connect
     await sleep(1000);
-    
     emit("Creating Scan...", 2);
-    await sleep(500);
-    
-    emit("Repository cloned...", 5);
     await sleep(500);
     
     let ghRepo = '';
@@ -31,52 +27,7 @@ export async function runScan(scanId, repoUrl, deployUrl) {
     let language = 'Unknown';
     let readme = '';
     let pkgJsonStr = '';
-    
-    if (repoUrl && repoUrl.includes('github.com')) {
-      const parts = repoUrl.replace(/\/$/, '').split('/');
-      const repoOwner = parts[parts.length - 2];
-      const repoName = parts[parts.length - 1];
-      ghRepo = `${repoOwner}/${repoName}`;
-      
-      const ghRes = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}`);
-      if (ghRes.ok) {
-        const data = await ghRes.json();
-        language = data.language || language;
-      }
-      
-      emit("README analyzed...", 10);
-      const rmRes = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}/contents/README.md`);
-      if (rmRes.ok) {
-        const rmData = await rmRes.json();
-        if (rmData.content) readme = Buffer.from(rmData.content, 'base64').toString();
-      }
-      await sleep(300);
-      
-      const pkgRes = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}/contents/package.json`);
-      if (pkgRes.ok) {
-        const pkgData = await pkgRes.json();
-        if (pkgData.content) pkgJsonStr = Buffer.from(pkgData.content, 'base64').toString();
-      }
-      await sleep(300);
-    } else {
-      emit("README analyzed...", 10); await sleep(300);
-    }
-    
-    emit("Dependencies parsed...", 15);
-    await sleep(300);
-    
-    if (pkgJsonStr) {
-      if (pkgJsonStr.includes('"next"')) framework = 'Next.js';
-      else if (pkgJsonStr.includes('"react"')) framework = 'React';
-      else if (pkgJsonStr.includes('"vue"')) framework = 'Vue';
-      else if (pkgJsonStr.includes('"svelte"')) framework = 'Svelte';
-      else if (pkgJsonStr.includes('"express"')) framework = 'Express Node.js';
-    } else if (language === 'Python') framework = 'Django/Flask';
-    else if (language === 'Go') framework = 'Go Backend';
-    
-    emit("Architecture detected...", 20);
-    await sleep(500);
-    
+
     const nodes = [];
     const consoleLogs = [];
     const networkRequests = [];
@@ -84,9 +35,54 @@ export async function runScan(scanId, repoUrl, deployUrl) {
     const jsExceptions = [];
     let finalDom = '';
     
-    if (deployUrl) {
-      emit("Playwright started...", 35);
-      await sleep(400);
+    const repoTask = async () => {
+      emit("Cloning repository...", 5);
+      await sleep(500);
+      
+      if (repoUrl && repoUrl.includes('github.com')) {
+        const parts = repoUrl.replace(/\/$/, '').split('/');
+        const repoOwner = parts[parts.length - 2];
+        const repoName = parts[parts.length - 1];
+        ghRepo = `${repoOwner}/${repoName}`;
+        
+        const ghRes = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}`);
+        if (ghRes.ok) {
+          const data = await ghRes.json();
+          language = data.language || language;
+        }
+        
+        emit("README analyzed...", 10);
+        const rmRes = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}/contents/README.md`);
+        if (rmRes.ok) {
+          const rmData = await rmRes.json();
+          if (rmData.content) readme = Buffer.from(rmData.content, 'base64').toString();
+        }
+        
+        const pkgRes = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}/contents/package.json`);
+        if (pkgRes.ok) {
+          const pkgData = await pkgRes.json();
+          if (pkgData.content) pkgJsonStr = Buffer.from(pkgData.content, 'base64').toString();
+        }
+      } else {
+        emit("README analyzed...", 10); await sleep(300);
+      }
+      
+      emit("Dependencies parsed...", 15);
+      
+      if (pkgJsonStr) {
+        if (pkgJsonStr.includes('"next"')) framework = 'Next.js';
+        else if (pkgJsonStr.includes('"react"')) framework = 'React';
+        else if (pkgJsonStr.includes('"vue"')) framework = 'Vue';
+        else if (pkgJsonStr.includes('"svelte"')) framework = 'Svelte';
+        else if (pkgJsonStr.includes('"express"')) framework = 'Express Node.js';
+      } else if (language === 'Python') framework = 'Django/Flask';
+      else if (language === 'Go') framework = 'Go Backend';
+      
+      emit("Architecture detected...", 19);
+    };
+
+    const playwrightTask = async () => {
+      emit("Playwright started...", 20);
       
       let browser, context, page, AxeBuilder;
       
@@ -101,7 +97,7 @@ export async function runScan(scanId, repoUrl, deployUrl) {
           on: () => {}
         };
         browser = { close: async () => {} };
-        consoleLogs.push({ type: 'error', text: 'TypeError: Cannot read properties of undefined (reading \'length\')' });
+        consoleLogs.push({ type: 'error', text: "TypeError: Cannot read properties of undefined (reading 'length')" });
         networkRequests.push({ url: 'https://api.github.com/test', status: 500 });
       } else {
         const playwright = await import('playwright');
@@ -166,20 +162,15 @@ export async function runScan(scanId, repoUrl, deployUrl) {
           a11y_score: Math.round(a11yScore),
           perf_score: Math.round(perfScore)
         });
-        
-        // Don't clear logs here so ai.js can see the full timeline across pages, 
-        // but normally we'd filter them per page. We will pass all to AI.
       };
 
       try {
         const s = Date.now();
-        emit("Homepage visited...", 45);
+        emit("Homepage visited...", 35);
         await page.goto(deployUrl, { waitUntil: 'networkidle', timeout: 15000 });
         visited.add(deployUrl);
         await captureNode(deployUrl, '/', s);
-      } catch(e) {
-        // ignore
-      }
+      } catch(e) {}
       
       let hrefs = await page.evaluate(() => {
         return Array.from(document.querySelectorAll('a'))
@@ -197,25 +188,23 @@ export async function runScan(scanId, repoUrl, deployUrl) {
           const pathName = new URL(link).pathname || link;
           emit(`Crawling ${pathName}...`, 50);
           await captureNode(link, pathName, s);
-        } catch(e) {
-          // ignore
-        }
+        } catch(e) {}
       }
       
       emit("Dashboard visited...", 55);
-      await sleep(400);
-      
       finalDom = await page.content();
       await browser.close();
       
       emit("Screenshot captured...", 60);
-      await sleep(400);
       emit("Console logs captured...", 65);
-      await sleep(400);
+    };
+
+    // Parallelize Playwright and Repository Tasks
+    if (deployUrl) {
+      await Promise.all([repoTask(), playwrightTask()]);
     } else {
-      // No deploy URL provided, skip Playwright and skip UI node scanning
-      emit("Skipping Playwright (No Deployment URL)", 45, true);
-      await sleep(500);
+      await repoTask();
+      emit("Skipping Playwright (No Deployment URL)", 65, true);
     }
     
     emit("Issues detected...", 70);
@@ -224,7 +213,6 @@ export async function runScan(scanId, repoUrl, deployUrl) {
     emit("BUG IDs generated...", 80);
     const finalScreenshot = nodes.length > 0 ? nodes[0].screenshot : '';
     
-    // Pass repo context (readme, framework, language) to AI
     const repoContext = { ghRepo, framework, language, readme };
     const fullTelemetry = { consoleLogs, networkRequests, jsExceptions, axeViolations, nodes };
     const aiData = await analyzeScanData(scanId, deployUrl, fullTelemetry, finalDom, repoContext);
@@ -235,7 +223,6 @@ export async function runScan(scanId, repoUrl, deployUrl) {
     emit("Engineering Prompt generated...", 90);
     await sleep(300);
     
-    // Save UI Nodes into journeys if any
     for (const node of nodes) {
       await db.insert('journeys', {
         id: node.id, scan_id: node.scan_id, path: node.path, status: node.status, 
@@ -247,7 +234,6 @@ export async function runScan(scanId, repoUrl, deployUrl) {
     
     if (aiData && aiData.issues) {
       for (const iss of aiData.issues) {
-        // Make sure it saves the screenshot if none provided by AI
         const issScreenshot = iss.screenshot || finalScreenshot;
         await db.insert('issues', {
           id: iss.id, scan_id: scanId, title: iss.title, status: iss.status, severity: iss.severity, 
@@ -283,7 +269,6 @@ export async function runScan(scanId, repoUrl, deployUrl) {
     const brokenFlows = aiData?.flows?.length || 0;
     const apiFails = networkRequests.filter(r => r.status >= 400).length;
     
-    // Extract generated repo summary and architecture if AI provided it
     const arch = aiData?.architecture || 'Microservices Architecture';
     const repSummary = aiData?.repository_summary || 'Standard web application repository.';
     
