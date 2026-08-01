@@ -2,11 +2,9 @@ import { GoogleGenAI } from '@google/genai';
 import { randomUUID } from 'crypto';
 
 export async function analyzeScanData(scanId, url, telemetry, dom, repoContext) {
-  // If we lack an API key, we will fall back, but ideally the user provided one.
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    console.warn("[AI] No GEMINI_API_KEY found. Falling back to synthetic mock data.");
-    return fallbackGeneration(scanId, url, telemetry, dom, repoContext);
+    throw new Error("[AI] No GEMINI_API_KEY found. Real scan pipeline requires an API key.");
   }
 
   const ai = new GoogleGenAI({ apiKey });
@@ -92,7 +90,7 @@ Output EXACTLY this JSON structure:
     return data;
   } catch (error) {
     console.error("[AI] Gemini generation failed:", error);
-    return fallbackGeneration(scanId, url, telemetry, dom, repoContext);
+    throw new Error("AI Generation failed. The repository might be too complex or API limits were reached.");
   }
 }
 

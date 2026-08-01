@@ -203,24 +203,35 @@ const actions = {
     const res = await api.get(`/api/repo/preview?url=${encodeURIComponent(url)}`);
     if (res.repo && previewEl) {
       if (nameInput && (!nameInput.value || nameInput.value.includes('Scan'))) {
-        nameInput.value = `${res.repo} Scan`;
+        const fw = res.framework !== 'Unknown' && res.framework !== 'Web API' ? res.framework : res.language;
+        let pName = res.name.replace(/[-_]/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        nameInput.value = `${fw} ${pName} Scan`;
       }
       previewEl.innerHTML = `
-        <div style="margin-top:12px; padding:16px; border:1px solid var(--lime); border-radius:8px; background:rgba(0, 255, 136, 0.05);">
-          <div style="display:flex; justify-content:space-between; margin-bottom:12px;">
-            <span style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px;">Repository Detected</span>
-            <span class="tag lime pulse-anim" style="font-size:10px;">Ready</span>
+        <div style="margin-top:12px; padding:20px; border:1px solid rgba(255,255,255,0.15); border-radius:12px; background:rgba(0, 0, 0, 0.4);">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px;">
+            <div>
+              <div style="font-size:20px; font-weight:600; color:#fff; margin-bottom:4px;">${res.repo}</div>
+              <div style="font-size:13px; color:var(--muted); line-height: 1.5;">${res.description || 'No description provided.'}</div>
+            </div>
+            <div style="text-align:right;">
+              <span class="tag lime pulse-anim" style="font-size:10px; margin-bottom:8px; display:inline-block;">Auto-Detected</span><br>
+              <span style="font-size:12px; color:var(--muted);">⭐ ${res.stars} &nbsp; 🍴 ${res.forks}</span>
+            </div>
           </div>
-          <div style="font-size:18px; font-weight:600; color:#fff; margin-bottom:4px;">${res.repo}</div>
-          <div style="font-size:13px; color:var(--muted); margin-bottom:16px;">Branch: <strong style="color:#fff;">${res.branch}</strong></div>
           
-          <div style="display:flex; flex-wrap:wrap; gap:8px;">
-            <span class="tag" style="background:#222; border:1px solid #333;"><strong style="color:var(--lime);">Lang:</strong> ${res.language}</span>
-            <span class="tag" style="background:#222; border:1px solid #333;"><strong style="color:var(--lime);">FW:</strong> ${res.framework}</span>
-            <span class="tag" style="background:#222; border:1px solid #333;"><strong style="color:var(--lime);">Pkg:</strong> ${res.packageManager}</span>
-            <span class="tag" style="background:#222; border:1px solid #333;"><strong style="color:var(--lime);">Test:</strong> ${res.testing}</span>
-            <span class="tag" style="background:#222; border:1px solid #333;"><strong style="color:var(--lime);">DB:</strong> ${res.database}</span>
-            <span class="tag" style="background:#222; border:1px solid #333;"><strong style="color:var(--lime);">Deploy:</strong> ${res.deployment}</span>
+          <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom: 16px;">
+            <span class="tag" style="background:#1a1a1a; border:1px solid #333; padding: 4px 10px;"><strong style="color:var(--lime);">Owner:</strong> ${res.owner}</span>
+            <span class="tag" style="background:#1a1a1a; border:1px solid #333; padding: 4px 10px;"><strong style="color:var(--lime);">Lang:</strong> ${res.language}</span>
+            <span class="tag" style="background:#1a1a1a; border:1px solid #333; padding: 4px 10px;"><strong style="color:var(--lime);">FW:</strong> ${res.framework}</span>
+            <span class="tag" style="background:#1a1a1a; border:1px solid #333; padding: 4px 10px;"><strong style="color:var(--lime);">Pkg:</strong> ${res.packageManager}</span>
+            <span class="tag" style="background:#1a1a1a; border:1px solid #333; padding: 4px 10px;"><strong style="color:var(--lime);">DB:</strong> ${res.database}</span>
+            <span class="tag" style="background:#1a1a1a; border:1px solid #333; padding: 4px 10px;"><strong style="color:var(--lime);">Deploy:</strong> ${res.deployment}</span>
+          </div>
+
+          <div style="border-top:1px solid rgba(255,255,255,0.05); padding-top:16px;">
+            <div style="font-size:12px; color:var(--muted); margin-bottom:8px;"><strong>Estimated Size:</strong> ~${res.estimatedPages} core routes</div>
+            <div style="font-size:12px; color:var(--muted);"><strong>Tech Stack:</strong> ${res.techStack}</div>
           </div>
         </div>
       `;

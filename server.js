@@ -1,4 +1,5 @@
 import express from 'express';
+import { GoogleGenAI } from '@google/genai';
 import fs from 'fs';
 import cors from 'cors';
 import { initDb, getDb, getLatestScanId } from './db.js';
@@ -36,6 +37,29 @@ app.post('/api/login', asyncHandler(async (req, res) => {
   res.json({ user });
 }));
 
+app.get('/api/reports/:scanId', asyncHandler(async (req, res) => {
+  const { scanId } = req.params;
+  const db = getDb();
+  
+  const scan = await db.get('scans', { id: scanId });
+  if (!scan) return res.status(404).json({ error: 'Scan not found' });
+  
+  const repo = await db.get('repositories', { id: scan.repository_id });
+  const issues = await db.all('issues', { scan_id: scanId });
+  const flows = await db.all('broken_flows', { scan_id: scanId });
+  const evals = await db.all('evals', { scan_id: scanId });
+  const aiReport = await db.get('ai_reports', { scan_id: scanId });
+  
+  res.json({
+    scan,
+    repo,
+    issues,
+    flows,
+    evals,
+    aiData: aiReport ? aiReport.summary_json : null
+  });
+}));
+
 app.get('/api/dashboard', asyncHandler(async (req, res) => {
   const db = getDb();
   const latestScan = await db.get('scans', {}, { orderBy: 'created_at', order: 'desc' });
@@ -59,7 +83,7 @@ app.get('/api/dashboard', asyncHandler(async (req, res) => {
 app.get('/api/repo/preview', asyncHandler(async (req, res) => {
   const { url } = req.query;
   if (!url || !url.includes('github.com')) {
-    return res.json({ repo: '', owner: '', name: '', branch: '', language: 'Unknown', framework: 'Web API', packageManager: 'Unknown', testing: 'None', database: 'None', deployment: 'Unknown' });
+    return res.json({ repo: '', owner: '', name: '', branch: '', language: 'Unknown', framework: 'Web API', packageManager: 'Unknown', testing: 'None', database: 'None', deployment: 'Unknown', stars: 0, forks: 0, description: '', readme: '', estimatedPages: 5, techStack: 'Unknown' });
   }
   try {
     const parts = url.replace(/\/$/, '').split('/');
@@ -76,6 +100,12 @@ app.get('/api/repo/preview', asyncHandler(async (req, res) => {
     let testing = 'None';
     let database = 'None';
     let deployment = 'Unknown';
+    let stars = 0;
+    let forks = 0;
+    let description = '';
+    let readme = '';
+    let estimatedPages = 5;
+    let techStack = [];
     
     // Fetch base repository metadata
     const ghRes = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}`);
@@ -84,6 +114,9 @@ app.get('/api/repo/preview', asyncHandler(async (req, res) => {
       if (data.language) language = data.language;
       repo = data.full_name;
       branch = data.default_branch || 'main';
+      stars = data.stargazers_count;
+      forks = data.forks_count;
+      description = data.description || '';
     }
     
     // Fetch repository tree to look for lock files and config files
@@ -99,47 +132,53 @@ app.get('/api/repo/preview', asyncHandler(async (req, res) => {
         else if (files.includes('Pipfile.lock') || files.includes('requirements.txt')) packageManager = 'pip';
         else if (files.includes('go.sum')) packageManager = 'go mod';
         
-        if (files.some(f => f.includes('prisma/schema.prisma'))) database = 'Prisma';
-        else if (files.includes('drizzle.config.ts')) database = 'Drizzle ORM';
-        else if (files.includes('mongoose.js')) database = 'MongoDB';
-        else if (files.some(f => f.includes('models.py'))) database = 'SQLAlchemy / Django ORM';
+        if (files.includes('next.config.js') || files.includes('next.config.mjs')) framework = 'Next.js';
+        else if (files.includes('nuxt.config.js') || files.includes('nuxt.config.ts')) framework = 'Nuxt.js';
+        else if (files.includes('svelte.config.js')) framework = 'SvelteKit';
+        else if (files.includes('remix.config.js')) framework = 'Remix';
+        else if (files.includes('vite.config.js') || files.includes('vite.config.ts')) framework = 'Vite / React';
+        else if (files.includes('angular.json')) framework = 'Angular';
+        else if (files.includes('manage.py')) framework = 'Django';
+        else if (files.includes('artisan')) framework = 'Laravel';
+        else if (files.includes('pom.xml')) framework = 'Spring Boot';
         
         if (files.includes('jest.config.js')) testing = 'Jest';
-        else if (files.includes('vitest.config.ts')) testing = 'Vitest';
-        else if (files.includes('cypress.config.js') || files.includes('cypress.json')) testing = 'Cypress';
-        else if (files.includes('playwright.config.ts') || files.includes('playwright.config.js')) testing = 'Playwright';
+        else if (files.includes('playwright.config.ts')) testing = 'Playwright';
+        else if (files.includes('cypress.config.js')) testing = 'Cypress';
+        
+        if (files.includes('prisma/schema.prisma')) { database = 'PostgreSQL / Prisma'; techStack.push('Prisma'); }
+        else if (files.includes('drizzle.config.ts')) { database = 'Drizzle'; techStack.push('Drizzle'); }
         
         if (files.includes('vercel.json')) deployment = 'Vercel';
         else if (files.includes('netlify.toml')) deployment = 'Netlify';
-        else if (files.includes('docker-compose.yml') || files.includes('Dockerfile')) deployment = 'Docker';
-        else if (files.some(f => f.includes('.github/workflows'))) deployment = 'GitHub Actions';
-      }
-    }
-    
-    // Read package.json to refine framework and testing if it's JS/TS
-    const pkgRes = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}/contents/package.json`);
-    if (pkgRes.ok) {
-      const pkgData = await pkgRes.json();
-      if (pkgData.content) {
-        const pkgJson = Buffer.from(pkgData.content, 'base64').toString();
-        if (pkgJson.includes('"next"')) framework = 'Next.js';
-        else if (pkgJson.includes('"nuxt"')) framework = 'Nuxt.js';
-        else if (pkgJson.includes('"react"')) framework = 'React';
-        else if (pkgJson.includes('"vue"')) framework = 'Vue';
-        else if (pkgJson.includes('"svelte"')) framework = 'Svelte';
-        else if (pkgJson.includes('"express"')) framework = 'Express Node.js';
+        else if (files.includes('Dockerfile') || files.includes('docker-compose.yml')) deployment = 'Docker';
         
-        if (pkgJson.includes('"mongoose"')) database = 'MongoDB';
-        if (pkgJson.includes('"pg"')) database = 'PostgreSQL';
+        if (files.includes('tailwind.config.js') || files.includes('tailwind.config.ts')) techStack.push('Tailwind CSS');
+        if (language === 'TypeScript') techStack.push('TypeScript');
+        
+        // Estimate pages based on typical directories
+        const appPages = files.filter(f => f.startsWith('app/') && f.endsWith('page.tsx'));
+        const pagesDir = files.filter(f => f.startsWith('pages/') && f.endsWith('.tsx'));
+        estimatedPages = Math.max(5, appPages.length + pagesDir.length);
       }
-    } else {
-       if (language === 'Python') framework = 'Django/Flask';
-       if (language === 'Go') framework = 'Go Backend';
     }
     
-    res.json({ repo, owner, name, branch, framework, language, packageManager, testing, database, deployment });
+    // Fetch README
+    const rmRes = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}/readme`);
+    if (rmRes.ok) {
+      const rmData = await rmRes.json();
+      if (rmData.content) readme = Buffer.from(rmData.content, 'base64').toString();
+    }
+    
+    if (techStack.length === 0) techStack.push(language, framework);
+    
+    res.json({ 
+      repo, owner, name, branch, language, framework, packageManager, testing, database, deployment,
+      stars, forks, description, readme: readme.substring(0, 1000) + (readme.length > 1000 ? '...' : ''),
+      estimatedPages, techStack: techStack.join(', ')
+    });
   } catch (err) {
-    res.json({ repo: 'Unknown', owner: '', name: '', branch: '', framework: 'Unknown', language: 'Unknown', packageManager: 'Unknown', testing: 'None', database: 'None', deployment: 'Unknown' });
+    res.json({ repo: '', owner: '', name: '', branch: '', language: 'Unknown', framework: 'Web API', packageManager: 'Unknown', testing: 'None', database: 'None', deployment: 'Unknown', stars: 0, forks: 0, description: '', readme: '', estimatedPages: 5, techStack: 'Unknown' });
   }
 }));
 
@@ -147,9 +186,13 @@ app.post('/api/scans', asyncHandler(async (req, res) => {
   const { name, repoUrl, deployUrl } = req.body;
   const db = getDb();
   
-  // Create repository entry
-  const repoId = `repo-${randomUUID().split('-')[0]}`;
-  await db.insert('repositories', { id: repoId, user_id: 1, name: repoUrl, url: repoUrl, framework: 'Unknown', language: 'Unknown', architecture: 'Unknown', readme_summary: '' });
+  const repoId = repoUrl ? repoUrl.replace('https://github.com/', '') : `repo-${randomUUID().split('-')[0]}`;
+  
+  try {
+    await db.insert('repositories', { id: repoId, name: repoUrl, url: repoUrl });
+  } catch(e) {
+    // Repo might already exist, which is fine
+  }
   
   const id = `SCAN-LG-2026-${randomUUID().split('-')[0].toUpperCase()}`;
   await db.insert('scans', { id, repository_id: repoId, name, deploy_url: deployUrl, status: 'queued' });
@@ -232,7 +275,7 @@ app.get('/api/broken_flows', asyncHandler(async (req, res) => {
 app.get('/api/journeys', asyncHandler(async (req, res) => {
   const db = getDb();
   const sid = req.query.scanId || await getLatestScanId(db);
-  const nodes = await db.all('journeys', { scan_id: sid });
+  const nodes = await db.all('journey_nodes', { scan_id: sid });
   res.json(nodes);
 }));
 
@@ -359,46 +402,30 @@ ${issue.stack_trace || 'None'}
         console.error(`[AI Fix Assistant] Ollama fetch failed:`, e.message);
         throw new Error('Local AI is unavailable because Ollama is not running.');
       }
+    } else if (mode === 'cloud-free') {
+      const geminiApiKey = process.env.GEMINI_API_KEY;
+      if (!geminiApiKey) {
+        return res.status(401).json({ error: 'Server missing GEMINI_API_KEY for free tier.' });
+      }
+      try {
+        const ai = new GoogleGenAI({ apiKey: geminiApiKey });
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: prompt,
+          config: {
+            responseMimeType: "application/json",
+          }
+        });
+        aiData = { choices: [{ message: { content: response.text } }] };
+      } catch (e) {
+        console.error(`[AI Fix Assistant] Gemini API Error:`, e);
+        throw new Error('Cloud Free AI fetch failed.');
+      }
     } else {
       const finalApiKey = apiKey || process.env.OPENROUTER_API_KEY;
       if (!finalApiKey || finalApiKey.trim() === '') {
-        if (mode === 'cloud-free') {
-          console.log(`[AI Fix Assistant] No OpenRouter API key found. Using mock response for cloud-free mode.`);
-          // Simulate a network delay
-          await new Promise(r => setTimeout(r, 2000));
-          aiData = {
-            choices: [{
-              message: {
-                content: JSON.stringify({
-                  problem_analysis: {
-                    bug_id: issueId,
-                    severity: issue.severity || "High",
-                    why_happened: "Mock analysis: The application failed to validate state before rendering.",
-                    production_impact: "Users may experience crashes on this specific view.",
-                    affected_files: ["src/app.js", "src/views.js"],
-                    affected_function: "renderView",
-                    affected_component: issue.affected_component || "Unknown Component",
-                    root_cause: issue.root_cause || "Missing null check on critical data object.",
-                    bug_explanation: "The code tried to read data that didn't exist yet, causing it to break."
-                  },
-                  engineering_solution: {
-                    step_by_step: ["Add a null check before rendering", "Provide a fallback UI", "Add error boundaries"],
-                    before_code: "const data = state.data; render(data.items);",
-                    after_code: "const data = state.data; if (!data) return renderFallback(); render(data.items);",
-                    suggested_changes: "Implemented defensive programming to handle empty states.",
-                    regression_tests: ["Test rendering with null state", "Test rendering with valid state"],
-                    confidence_score: 95
-                  },
-                  developer_prompt: "Please review the attached code and add a null check where 'state.data' is accessed. Ensure a fallback UI is rendered if data is missing.",
-                  ide_usage_guide: "Paste this prompt into your IDE's AI assistant (e.g., Cursor, Copilot) along with the affected file."
-                })
-              }
-            }]
-          };
-        } else {
-          console.error(`[AI Fix Assistant] Error: Invalid OpenRouter API key.`);
-          return res.status(401).json({ error: 'Invalid OpenRouter API key.' });
-        }
+        console.error(`[AI Fix Assistant] Error: Invalid OpenRouter API key.`);
+        return res.status(401).json({ error: 'Invalid OpenRouter API key.' });
       } else {
         console.log(`[AI Fix Assistant] Request URL: https://openrouter.ai/api/v1/chat/completions`);
         console.log(`[AI Fix Assistant] Selected Model: ${model || 'google/gemini-2.5-flash'}`);
@@ -429,6 +456,7 @@ ${issue.stack_trace || 'None'}
           console.error(`[AI Fix Assistant] OpenRouter Response Body:`, errText);
           let errorMsg = `OpenRouter returned an error (${openRouterRes.status}).`;
           if (openRouterRes.status === 401) errorMsg = 'Invalid OpenRouter API key.';
+          else if (openRouterRes.status === 402) errorMsg = 'Insufficient OpenRouter credits.';
           else if (openRouterRes.status === 403) errorMsg = 'Permission Denied.';
           else if (openRouterRes.status === 429) errorMsg = 'Rate limit exceeded.';
           else if (openRouterRes.status === 404) errorMsg = 'Model unavailable.';
