@@ -1259,7 +1259,7 @@ const views = {
           <div id="aifix-result" class="ai-result">
             <!-- Results injected here -->
           </div>
-        `}
+        `)}
       </div>
     `;
     
