@@ -175,6 +175,13 @@ app.get('/api/journeys', asyncHandler(async (req, res) => {
   res.json(nodes);
 }));
 
+app.get('/api/evals', asyncHandler(async (req, res) => {
+  const db = getDb();
+  const sid = req.query.scanId || await getLatestScanId(db);
+  const evals = await db.all('evals', { scan_id: sid });
+  res.json(evals);
+}));
+
 app.get('/api/ai_fix_plans', asyncHandler(async (req, res) => {
   const db = getDb();
   const issueId = req.query.issueId;

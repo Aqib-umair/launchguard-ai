@@ -9,6 +9,7 @@
     "build": "echo 'No build required for this vanilla JS app'"
   },
   "dependencies": {
+    "@axe-core/playwright": "^4.12.1",
     "@google/genai": "^2.14.0",
     "@supabase/supabase-js": "^2.111.0",
     "cors": "^2.8.6",

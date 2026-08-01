@@ -80,13 +80,15 @@ export async function runScan(scanId, repoUrl, deployUrl) {
     const nodes = [];
     const consoleLogs = [];
     const networkRequests = [];
+    const axeViolations = [];
+    const jsExceptions = [];
     let finalDom = '';
     
     if (deployUrl) {
       emit("Playwright started...", 35);
       await sleep(400);
       
-      let browser, context, page;
+      let browser, context, page, AxeBuilder;
       
       if (isVercel) {
         // Mock page object for Vercel
@@ -103,6 +105,8 @@ export async function runScan(scanId, repoUrl, deployUrl) {
         networkRequests.push({ url: 'https://api.github.com/test', status: 500 });
       } else {
         const playwright = await import('playwright');
+        AxeBuilder = (await import('@axe-core/playwright')).default;
+        
         const chromium = playwright.chromium;
         browser = await chromium.launch({ headless: true });
         context = await browser.newContext({ viewport: { width: 1280, height: 720 }, userAgent: 'LaunchGuard-AI-Agent/1.0' });
@@ -117,6 +121,10 @@ export async function runScan(scanId, repoUrl, deployUrl) {
           const url = response.url();
           networkRequests.push({ url, status });
         });
+
+        page.on('pageerror', err => {
+          jsExceptions.push({ url: page.url(), error: err.message, stack: err.stack });
+        });
       }
       
       const visited = new Set();
@@ -126,12 +134,24 @@ export async function runScan(scanId, repoUrl, deployUrl) {
         const buffer = await page.screenshot({ type: 'jpeg', quality: 50 });
         const b64 = `data:image/jpeg;base64,${buffer.toString('base64')}`;
         
+        let a11yErrors = 0;
+        let pageAxeData = [];
+        if (!isVercel && AxeBuilder) {
+          try {
+            const results = await new AxeBuilder({ page }).analyze();
+            a11yErrors = results.violations.length;
+            pageAxeData = results.violations.map(v => ({ id: v.id, impact: v.impact, description: v.description }));
+            axeViolations.push(...pageAxeData.map(v => ({ url: currentUrl, ...v })));
+          } catch(e) { console.error("Axe Error:", e); }
+        }
+
         const pageConsoleErrs = consoleLogs.filter(l => l.type === 'error').map(l => l.text);
         const pageNetErrs = networkRequests.filter(r => r.status >= 400).map(r => `${r.status} ${r.url}`);
-        const nodeErrors = pageConsoleErrs.length + pageNetErrs.length;
+        const pageJsErrs = jsExceptions.filter(e => e.url === currentUrl).map(e => e.error);
+        const nodeErrors = pageConsoleErrs.length + pageNetErrs.length + pageJsErrs.length + a11yErrors;
         
         const perfScore = Math.max(10, 100 - (loadTime / 100) - (nodeErrors * 5));
-        const a11yScore = Math.max(20, 100 - (nodeErrors * 10));
+        const a11yScore = Math.max(20, 100 - (a11yErrors * 10));
         
         nodes.push({
           id: `NODE-${randomUUID().split('-')[0]}`,
@@ -140,15 +160,15 @@ export async function runScan(scanId, repoUrl, deployUrl) {
           status: nodeErrors === 0 ? 'green' : (nodeErrors < 3 ? 'yellow' : 'red'),
           screenshot: b64,
           errors: nodeErrors,
-          console_errors: JSON.stringify(pageConsoleErrs),
+          console_errors: JSON.stringify(pageConsoleErrs.concat(pageJsErrs)),
           network_errors: JSON.stringify(pageNetErrs),
           load_time: loadTime,
           a11y_score: Math.round(a11yScore),
           perf_score: Math.round(perfScore)
         });
         
-        consoleLogs.length = 0;
-        networkRequests.length = 0;
+        // Don't clear logs here so ai.js can see the full timeline across pages, 
+        // but normally we'd filter them per page. We will pass all to AI.
       };
 
       try {
@@ -175,14 +195,13 @@ export async function runScan(scanId, repoUrl, deployUrl) {
           await page.goto(link, { waitUntil: 'networkidle', timeout: 10000 });
           visited.add(link);
           const pathName = new URL(link).pathname || link;
+          emit(`Crawling ${pathName}...`, 50);
           await captureNode(link, pathName, s);
         } catch(e) {
           // ignore
         }
       }
       
-      emit("Login visited...", 50);
-      await sleep(400);
       emit("Dashboard visited...", 55);
       await sleep(400);
       
@@ -207,7 +226,8 @@ export async function runScan(scanId, repoUrl, deployUrl) {
     
     // Pass repo context (readme, framework, language) to AI
     const repoContext = { ghRepo, framework, language, readme };
-    const aiData = await analyzeScanData(scanId, deployUrl, consoleLogs, networkRequests, nodes, finalDom, repoContext);
+    const fullTelemetry = { consoleLogs, networkRequests, jsExceptions, axeViolations, nodes };
+    const aiData = await analyzeScanData(scanId, deployUrl, fullTelemetry, finalDom, repoContext);
     
     emit("AI Fix Plan created...", 85);
     await sleep(300);
@@ -227,11 +247,13 @@ export async function runScan(scanId, repoUrl, deployUrl) {
     
     if (aiData && aiData.issues) {
       for (const iss of aiData.issues) {
+        // Make sure it saves the screenshot if none provided by AI
+        const issScreenshot = iss.screenshot || finalScreenshot;
         await db.insert('issues', {
           id: iss.id, scan_id: scanId, title: iss.title, status: iss.status, severity: iss.severity, 
           area: iss.area, root_cause: iss.root_cause, patch: iss.patch, affected_url: iss.affected_url, 
           affected_component: iss.affected_component, before_code: iss.before_code, after_code: iss.after_code, 
-          screenshot: finalScreenshot, console_error: iss.console_error, network_error: iss.network_error, 
+          screenshot: issScreenshot, console_error: iss.console_error, network_error: iss.network_error, 
           stack_trace: iss.stack_trace, confidence: iss.confidence
         });
       }
@@ -244,6 +266,15 @@ export async function runScan(scanId, repoUrl, deployUrl) {
           duration: flow.duration, screenshot: finalScreenshot, console_error: flow.console_error, 
           network_error: flow.network_error, dom_snapshot: flow.dom_snapshot, severity: flow.severity, 
           confidence: flow.confidence
+        });
+      }
+    }
+
+    if (aiData && aiData.evals) {
+      for (const e of aiData.evals) {
+        await db.insert('evals', {
+          id: e.id, scan_id: scanId, name: e.name, target_url: e.target_url,
+          prompt: e.prompt, status: e.status, reasoning: e.reasoning
         });
       }
     }

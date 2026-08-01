@@ -130,7 +130,7 @@ class MockAdapter {
   constructor() {
     console.log("[DB] Initialized Memory Mock DB (Warning: Data will not persist on serverless)");
     this.tables = {
-      users: [], repositories: [], scans: [], journeys: [], broken_flows: [], issues: [], ai_fix_plans: [], reports: []
+      users: [], repositories: [], scans: [], journeys: [], broken_flows: [], issues: [], ai_fix_plans: [], reports: [], evals: []
     };
   }
   async insert(table, data) {
@@ -190,6 +190,7 @@ export async function initDb() {
       CREATE TABLE IF NOT EXISTS broken_flows (id TEXT PRIMARY KEY, scan_id TEXT, name TEXT, score INTEGER, fail_step TEXT, duration TEXT, screenshot TEXT, console_error TEXT, network_error TEXT, dom_snapshot TEXT, severity TEXT, confidence INTEGER);
       CREATE TABLE IF NOT EXISTS issues (id TEXT PRIMARY KEY, scan_id TEXT, title TEXT, status TEXT, severity TEXT, area TEXT, root_cause TEXT, patch TEXT, affected_url TEXT, affected_component TEXT, before_code TEXT, after_code TEXT, screenshot TEXT, console_error TEXT, network_error TEXT, stack_trace TEXT, confidence INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE IF NOT EXISTS ai_fix_plans (id TEXT PRIMARY KEY, issue_id TEXT, problem_analysis TEXT, engineering_solution TEXT, developer_prompt TEXT, ide_usage_guide TEXT, model TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+      CREATE TABLE IF NOT EXISTS evals (id TEXT PRIMARY KEY, scan_id TEXT, name TEXT, target_url TEXT, prompt TEXT, status TEXT, reasoning TEXT);
       CREATE TABLE IF NOT EXISTS reports (id TEXT PRIMARY KEY, scan_id TEXT, summary TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
     `);
     
