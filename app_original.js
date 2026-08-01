@@ -1,16 +1,3 @@
-window.onerror = function(msg, url, line, col, err) {
-  console.error('Global window error:', msg, err);
-  if(document.body) document.body.innerHTML += '<div style="padding:40px;font-family:sans-serif;background:rgba(255,0,0,0.9);color:white;position:fixed;top:0;left:0;z-index:9999;width:100%;height:100%;"><h1>Frontend Crash (onerror)</h1><pre>' + (err ? err.stack : msg) + '</pre></div>';
-};
-window.onunhandledrejection = function(e) {
-  console.error('Unhandled promise rejection:', e.reason);
-  if(document.body) document.body.innerHTML += '<div style="padding:40px;font-family:sans-serif;background:rgba(255,0,0,0.9);color:white;position:fixed;top:0;left:0;z-index:9999;width:100%;height:100%;"><h1>Frontend Crash (onunhandledrejection)</h1><pre>' + (e.reason ? e.reason.stack : e.reason) + '</pre></div>';
-};
-
-console.log('app.js loaded');
-document.addEventListener('DOMContentLoaded', () => { console.log('DOMContentLoaded'); });
-
-try {
 // Utilities & Storage
 const store = {
   get: k => localStorage.getItem(k),
@@ -23,16 +10,11 @@ const store = {
 let currentUser = store.getJSON('user');
 
 const api = {
-  get: async (path) => { try { return await (await fetch(path)).json(); } catch(e) { console.error('fetch failed', e); return {}; } },
-  post: async (path, body) => { try { return await (await fetch(path, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) })).json(); } catch(e) { console.error('fetch failed', e); return {}; } }
+  get: async (path) => (await fetch(path)).json(),
+  post: async (path, body) => (await fetch(path, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) })).json()
 };
 
-let app = document.querySelector('#app');
-if (!app) {
-  app = document.createElement('div');
-  app.id = 'app';
-  if(document.body) document.body.appendChild(app);
-}
+const app = document.querySelector('#app');
 
 const navItems = [
   ['report','▦','Overview'],
@@ -184,43 +166,8 @@ const actions = {
     
     const res = await api.post('/api/scans', { name, repoUrl, deployUrl });
     store.set('activeScanId', res.id);
-    store.setJSON('activeScanData', { name, repoUrl, deployUrl });
     store.set('hasScanned', 'true');
     location.hash = 'progress';
-  },
-  previewRepo: async (e) => {
-    const url = e.target.value.trim();
-    const previewEl = document.getElementById('repoPreview');
-    const nameInput = document.querySelector('input[name="scanName"]');
-    
-    if (!url.includes('github.com')) {
-      if (previewEl) previewEl.innerHTML = '';
-      return;
-    }
-    
-    if (previewEl) previewEl.innerHTML = '<div style="margin-top:12px; padding:12px; border:1px solid var(--line); border-radius:8px; color:var(--muted); font-size:12px;">Detecting repository...</div>';
-    
-    const res = await api.get(`/api/repo/preview?url=${encodeURIComponent(url)}`);
-    if (res.repo && previewEl) {
-      if (nameInput && (!nameInput.value || nameInput.value.includes('Scan'))) {
-        nameInput.value = `${res.repo} Scan`;
-      }
-      previewEl.innerHTML = `
-        <div style="margin-top:12px; padding:16px; border:1px solid var(--lime); border-radius:8px; background:rgba(0, 255, 136, 0.05);">
-          <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
-            <span style="font-size:11px; color:var(--muted); text-transform:uppercase;">Repository Detected</span>
-            <span class="tag lime pulse-anim" style="font-size:10px;">Scanning...</span>
-          </div>
-          <div style="font-size:16px; font-weight:600; color:#fff; margin-bottom:12px;">${res.repo}</div>
-          <div style="display:flex; gap:12px; font-size:12px; color:var(--muted);">
-            <div><strong style="color:#fff;">Framework:</strong> ${res.framework}</div>
-            <div><strong style="color:#fff;">Language:</strong> ${res.language}</div>
-          </div>
-        </div>
-      `;
-    } else if (previewEl) {
-      previewEl.innerHTML = '';
-    }
   },
   applyPatch: (issueId, patchContent) => {
     const blob = new Blob([patchContent], { type: "text/plain" });
@@ -237,7 +184,7 @@ window.actions = actions;
 
 // Views
 const views = {
-  landing: () => { console.log("renderLandingPage()");
+  landing: () => {
     app.innerHTML = `<div class="app"><main class="main" style="border-left:0; background: #000; color: #fff;">
       <style>
         .premium-landing { font-family: 'Inter', sans-serif; overflow-x: hidden; background: #000; }
@@ -546,7 +493,7 @@ const views = {
     </div>`;
   },
   
-  report: async () => { console.log("renderDashboard()");
+  report: async () => {
     const data = await api.get('/api/dashboard');
     const greeting = `Hi, ${currentUser ? currentUser.name : 'Developer'} 👋`;
     
@@ -617,17 +564,16 @@ const views = {
       ${components.card(`<form class="form" onsubmit="actions.startScan(event)">
         <div class="field">
           <label>Scan name</label>
-          <input name="scanName" required placeholder="e.g. My Repo Scan">
+          <input name="scanName" required value="Playwright End-to-End Scan">
         </div>
         <div class="field">
           <label>GitHub Repository URL (Required)</label>
-          <input name="repoUrl" required placeholder="https://github.com/owner/repo" oninput="actions.previewRepo(event)">
+          <input name="repoUrl" required value="https://github.com/launchguard/example">
           <div style="font-size:12px; color:var(--muted); margin-top:4px;">Used to understand your source code, architecture, dependencies, README, and project structure.</div>
-          <div id="repoPreview"></div>
         </div>
         <div class="field">
           <label>Deployment URL (Optional)</label>
-          <input name="deployUrl" type="url" placeholder="https://example.com">
+          <input name="deployUrl" type="url" value="https://example.com">
           <div style="font-size:12px; color:var(--muted); margin-top:4px;">If provided, LaunchGuard will also perform a live Playwright scan against the deployed application.</div>
         </div>
         <button type="submit" class="btn primary" style="margin-top: 24px; padding: 14px 24px;">Start Scan →</button>
@@ -648,7 +594,6 @@ const views = {
   
   progress: async () => {
     const scanId = store.get('activeScanId');
-    const scanData = store.getJSON('activeScanData') || { name: scanId, repoUrl: '' };
     if (!scanId) return location.hash = 'setup';
     
     let body = components.head('Live execution', 'Scan Command Center', 'Watch autonomous agents navigate and test your application in real-time.', '<span class="tag lime pulse-anim">● AGENT ACTIVE</span>');
@@ -659,7 +604,7 @@ const views = {
         <h3>Active Jobs</h3>
         ${components.card(`<div class="job-item active">
           <div class="job-head"><span class="tag lime">RUNNING</span> <small id="prog-perc">0%</small></div>
-          <b style="word-break: break-all;">${scanData.name || scanId}</b><small>Executing scan pipeline</small>
+          <b>${scanId}</b><small>Executing via Playwright</small>
           <div class="bar" style="margin-top:12px; background:#111820;"><i id="prog-bar" style="width:0%; transition: width 0.5s;"></i></div>
         </div>`, 'lift')}
       </div>
@@ -682,7 +627,6 @@ const views = {
       const termEl = document.createElement('div');
       termEl.className = st.isWarn ? 'warn' : (st.log.includes('✓') ? 'ok' : 'cyan');
       termEl.className += ' anim-slide-in';
-      termEl.style.whiteSpace = 'pre-wrap';
       termEl.innerText = st.log;
       const tw = document.getElementById('prog-term');
       tw.appendChild(termEl);
@@ -690,14 +634,13 @@ const views = {
       
       if (st.p >= 100) {
         source.close();
+        setTimeout(() => { location.hash = 'report'; }, 3000);
       }
     };
   },
 
   replay: async () => {
-    const scanId = store.get('activeScanId');
-    if (!scanId) return location.hash = 'setup';
-    const flows = await api.get(`/api/broken_flows?scanId=${scanId}`);
+    const flows = await api.get('/api/flows');
     let flowList = flows.map(f => components.card(`
           <div class="split"><b>${f.name}</b> <span class="tag danger">${f.score}% Score</span></div>
           <div style="color:var(--muted); font-size:12px; margin-top:8px;">Failed at: <code>${f.fail_step}</code></div>
@@ -734,9 +677,7 @@ const views = {
   },
 
   shader: async () => {
-    const scanId = store.get('activeScanId');
-    if (!scanId) return location.hash = 'setup';
-    const nodes = await api.get(`/api/journeys?scanId=${scanId}`);
+    const nodes = await api.get('/api/nodes');
     let body = components.head('Flow intelligence', 'AI Website Journey Map', 'Interactive visual map of crawled routes, node health, and page-level telemetry.');
     body += components.progressTracker('shader');
     
@@ -978,9 +919,7 @@ const views = {
   },
 
   eval: async () => {
-    const scanId = store.get('activeScanId');
-    if (!scanId) return location.hash = 'setup';
-    const evals = await api.get(`/api/evals?scanId=${scanId}`);
+    const evals = await api.get('/api/evals');
     let body = components.head('Evaluation suite', 'Dynamic Evals', 'AI-generated assertions testing critical DOM state.');
     body += components.progressTracker('eval');
     
@@ -1008,9 +947,7 @@ const views = {
   },
 
   issue: async () => {
-    const scanId = store.get('activeScanId');
-    if (!scanId) return location.hash = 'setup';
-    const issues = await api.get(`/api/issues?scanId=${scanId}`);
+    const issues = await api.get('/api/issues');
     let body = components.head('Bug tracker', 'Issues & Alerts', 'AI-detected regressions from Playwright DOM logs.');
     body += components.progressTracker('issue');
     
@@ -1052,11 +989,9 @@ const views = {
   },
 
   fix: async () => {
-    const scanId = store.get('activeScanId');
-    if (!scanId) return location.hash = 'setup';
     const params = new URLSearchParams(window.location.hash.split('?')[1]);
     const requestedId = params.get('id');
-    const issues = await api.get(`/api/issues?scanId=${scanId}`);
+    const issues = await api.get('/api/issues');
     const targetIssue = requestedId ? issues.find(i => i.id === requestedId) : issues[0];
     
     let body = components.head('Issue Details', `${targetIssue ? targetIssue.id : 'None'}`, 'Comprehensive diagnostics and telemetry for the selected bug.');
@@ -1111,19 +1046,9 @@ const views = {
   },
 
   aifix: async () => {
-    const scanId = store.get('activeScanId');
-    if (!scanId) return location.hash = 'setup';
     const params = new URLSearchParams(window.location.hash.split('?')[1]);
-    let initialIssueId = params.get('id') || '';
+    const initialIssueId = params.get('id') || '';
     const initialMode = params.get('mode') || 'cloud';
-
-    if (!initialIssueId) {
-      const issues = await api.get(`/api/issues?scanId=${scanId}`);
-      if (issues.length > 0) initialIssueId = issues[0].id;
-    }
-
-    const existingPlans = await api.get(`/api/ai_fix_plans?issueId=${initialIssueId}`);
-    const existingPlan = existingPlans.length > 0 ? existingPlans[0] : null;
 
     let body = components.head('OpenRouter AI Agent', 'AI Fix Assistant', 'AI-powered root-cause analysis and automated engineering patch generation.');
     body += components.progressTracker('aifix');
@@ -1148,21 +1073,6 @@ const views = {
               <button class="btn primary" onclick="location.hash='issue'">Go to Issues</button>
             </div>
           `)}
-        ` : (existingPlan ? `
-          <div id="aifix-result" class="ai-result" style="display:block;">
-            <script>
-              setTimeout(() => {
-                const plan = ${JSON.stringify(existingPlan)};
-                document.getElementById('aifix-result').innerHTML = window.renderAIFixResult({
-                  problem_analysis: JSON.parse(plan.problem_analysis || '{}'),
-                  engineering_solution: JSON.parse(plan.engineering_solution || '{}'),
-                  developer_prompt: plan.developer_prompt,
-                  ide_usage_guide: plan.ide_usage_guide,
-                  confidence_score: 96
-                });
-              }, 100);
-            </script>
-          </div>
         ` : `
           <div id="aifix-setup" style="animation: fadeIn 0.5s ease;">
             <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 32px; align-items:start;">
@@ -1258,7 +1168,7 @@ const views = {
           <div id="aifix-result" class="ai-result">
             <!-- Results injected here -->
           </div>
-        `)}
+        `}
       </div>
     `;
     
@@ -1506,8 +1416,6 @@ const views = {
 
 // Router
 const router = async () => {
-  console.log("router initialization");
-  try {
   let fullHash = location.hash.slice(1) || '';
   let viewName = fullHash.split('?')[0];
   
@@ -1526,7 +1434,6 @@ const router = async () => {
   else if (viewName === 'register') views.auth(true);
   else if (views[viewName]) await views[viewName]();
   else await views.report();
-  } catch(e) { console.error("Router crashed", e); location.hash = ""; }
 };
 
 const bindEvents = () => {
@@ -1540,8 +1447,3 @@ const bindEvents = () => {
 
 window.onhashchange = router;
 router();
-
-} catch (err) {
-  console.error(err);
-  if(document.body) document.body.innerHTML = '<div style="padding:40px;font-family:sans-serif;background:rgba(255,0,0,0.9);color:white;position:fixed;top:0;left:0;z-index:9999;width:100%;height:100%;"><h1>Frontend Crash (top level)</h1><pre>' + err.stack + '</pre></div>';
-}

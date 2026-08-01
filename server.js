@@ -1,7 +1,7 @@
 import express from 'express';
 import fs from 'fs';
 import cors from 'cors';
-import { initDb, getDb } from './db.js';
+import { initDb, getDb, getLatestScanId } from './db.js';
 import { runScan } from './scanner.js';
 import { scanEmitter } from './emitter.js';
 import { randomUUID } from 'crypto';
@@ -13,12 +13,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 app.use(cors({ limit: '50mb' }));
 app.use(express.json({ limit: '50mb' }));
-
-// Helper to get latest scan ID
-const getLatestScanId = async (db) => {
-  const scan = await db.get(`SELECT id FROM scans ORDER BY created_at DESC LIMIT 1`);
-  return scan ? scan.id : null;
-};
 
 // Global error handler wrapper for async routes
 const asyncHandler = (fn) => (req, res, next) => {
@@ -34,9 +28,9 @@ const asyncHandler = (fn) => (req, res, next) => {
 app.post('/api/login', asyncHandler(async (req, res) => {
   const { name, email } = req.body;
   const db = getDb();
-  let user = await db.get(`SELECT * FROM users WHERE email = ?`, [email]);
+  let user = await db.get('users', { email });
   if (!user) {
-    const result = await db.run(`INSERT INTO users (name, email) VALUES (?, ?)`, [name, email]);
+    const result = await db.insert('users', { name, email });
     user = { id: result.lastID, name, email };
   }
   res.json({ user });
@@ -44,11 +38,11 @@ app.post('/api/login', asyncHandler(async (req, res) => {
 
 app.get('/api/dashboard', asyncHandler(async (req, res) => {
   const db = getDb();
-  const latestScan = await db.get(`SELECT * FROM scans ORDER BY created_at DESC LIMIT 1`);
+  const latestScan = await db.get('scans', {}, { orderBy: 'created_at', order: 'desc' });
   if (!latestScan) return res.json({ hasScan: false });
   
-  const issues = await db.all(`SELECT severity FROM issues WHERE scan_id = ?`, [latestScan.id]);
-  const brokenFlows = await db.all(`SELECT id FROM broken_flows WHERE scan_id = ?`, [latestScan.id]);
+  const issues = await db.all('issues', { scan_id: latestScan.id });
+  const brokenFlows = await db.all('broken_flows', { scan_id: latestScan.id });
   
   res.json({
     hasScan: true,
@@ -97,7 +91,6 @@ app.get('/api/repo/preview', asyncHandler(async (req, res) => {
         else if (pkgJson.includes('"express"')) framework = 'Express Node.js';
       }
     } else {
-       // if it's Python, say Django or Flask based on quick heuristic?
        if (language === 'Python') framework = 'Django/Flask';
        if (language === 'Go') framework = 'Go Backend';
     }
@@ -114,23 +107,17 @@ app.post('/api/scans', asyncHandler(async (req, res) => {
   
   // Create repository entry
   const repoId = `repo-${randomUUID().split('-')[0]}`;
-  await db.run(
-    `INSERT INTO repositories (id, user_id, name, url, framework, language, architecture, readme_summary) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [repoId, 1, repoUrl, repoUrl, 'Unknown', 'Unknown', 'Unknown', '']
-  );
+  await db.insert('repositories', { id: repoId, user_id: 1, name: repoUrl, url: repoUrl, framework: 'Unknown', language: 'Unknown', architecture: 'Unknown', readme_summary: '' });
   
   const id = `SCAN-LG-2026-${randomUUID().split('-')[0].toUpperCase()}`;
-  await db.run(
-    `INSERT INTO scans (id, repository_id, name, deploy_url, status) VALUES (?, ?, ?, ?, ?)`,
-    [id, repoId, name, deployUrl, 'queued']
-  );
+  await db.insert('scans', { id, repository_id: repoId, name, deploy_url: deployUrl, status: 'queued' });
   runScan(id, repoUrl, deployUrl);
   res.status(201).json({ id, name, status: 'queued' });
 }));
 
 app.get('/api/scans', asyncHandler(async (req, res) => {
   const db = getDb();
-  const scans = await db.all(`SELECT * FROM scans ORDER BY created_at DESC LIMIT 10`);
+  const scans = await db.all('scans', {}, { orderBy: 'created_at', order: 'desc', limit: 10 });
   res.json(scans);
 }));
 
@@ -141,7 +128,7 @@ app.get('/api/scans/:id/stream', asyncHandler(async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
 
   const db = getDb();
-  const scan = await db.get(`SELECT status, error_message, name, repository_id FROM scans WHERE id = ?`, [id]);
+  const scan = await db.get('scans', { id });
   
   if (!scan) {
     res.write(`data: ${JSON.stringify({ log: 'Scan not found.', p: 100, isWarn: true })}\n\n`);
@@ -170,21 +157,21 @@ app.get('/api/scans/:id/stream', asyncHandler(async (req, res) => {
 app.get('/api/issues', asyncHandler(async (req, res) => {
   const db = getDb();
   const sid = req.query.scanId || await getLatestScanId(db);
-  const issues = await db.all(`SELECT * FROM issues WHERE scan_id = ? ORDER BY created_at DESC`, [sid]);
+  const issues = await db.all('issues', { scan_id: sid }, { orderBy: 'created_at', order: 'desc' });
   res.json(issues);
 }));
 
 app.get('/api/broken_flows', asyncHandler(async (req, res) => {
   const db = getDb();
   const sid = req.query.scanId || await getLatestScanId(db);
-  const flows = await db.all(`SELECT * FROM broken_flows WHERE scan_id = ?`, [sid]);
+  const flows = await db.all('broken_flows', { scan_id: sid });
   res.json(flows);
 }));
 
 app.get('/api/journeys', asyncHandler(async (req, res) => {
   const db = getDb();
   const sid = req.query.scanId || await getLatestScanId(db);
-  const nodes = await db.all(`SELECT * FROM journeys WHERE scan_id = ?`, [sid]);
+  const nodes = await db.all('journeys', { scan_id: sid });
   res.json(nodes);
 }));
 
@@ -192,7 +179,7 @@ app.get('/api/ai_fix_plans', asyncHandler(async (req, res) => {
   const db = getDb();
   const issueId = req.query.issueId;
   if (!issueId) return res.json([]);
-  const plans = await db.all(`SELECT * FROM ai_fix_plans WHERE issue_id = ?`, [issueId]);
+  const plans = await db.all('ai_fix_plans', { issue_id: issueId });
   res.json(plans);
 }));
 
@@ -204,14 +191,14 @@ app.post('/api/ai/fix', async (req, res) => {
   
   try {
     console.log(`[AI Fix Assistant] Loading bug information for issue ${issueId}...`);
-    const issue = await db.get(`SELECT * FROM issues WHERE id = ?`, [issueId]);
+    const issue = await db.get('issues', { id: issueId });
     if (!issue) {
       console.error(`[AI Fix Assistant] Validation Error: Bug ID ${issueId} does not exist.`);
       return res.status(404).json({ error: `Bug ID ${issueId} does not exist.` });
     }
     
     console.log(`[AI Fix Assistant] Loading scan information for scan ${issue.scan_id}...`);
-    const scan = await db.get(`SELECT * FROM scans WHERE id = ?`, [issue.scan_id]);
+    const scan = await db.get('scans', { id: issue.scan_id });
     if (!scan) {
       console.error(`[AI Fix Assistant] Validation Error: Required scan data was not found.`);
       return res.status(400).json({ error: 'Required scan data was not collected.' });
@@ -362,10 +349,15 @@ ${issue.stack_trace || 'None'}
     }
 
     const fixId = `FIX-${randomUUID().split('-')[0].toUpperCase()}`;
-    await db.run(
-      `INSERT INTO ai_fix_plans (id, issue_id, problem_analysis, engineering_solution, developer_prompt, ide_usage_guide, model) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [fixId, issueId, JSON.stringify(parsedResponse.problem_analysis), JSON.stringify(parsedResponse.engineering_solution), parsedResponse.developer_prompt, parsedResponse.ide_usage_guide, model || (mode === 'local' ? 'ollama/llama3' : 'google/gemini-2.5-flash')]
-    );
+    await db.insert('ai_fix_plans', { 
+      id: fixId, 
+      issue_id: issueId, 
+      problem_analysis: JSON.stringify(parsedResponse.problem_analysis), 
+      engineering_solution: JSON.stringify(parsedResponse.engineering_solution), 
+      developer_prompt: parsedResponse.developer_prompt, 
+      ide_usage_guide: parsedResponse.ide_usage_guide, 
+      model: model || (mode === 'local' ? 'ollama/llama3' : 'google/gemini-2.5-flash')
+    });
 
     console.log(`[AI Fix Assistant] Final JSON output generated & saved to database.`);
     res.json(parsedResponse);
@@ -377,7 +369,7 @@ ${issue.stack_trace || 'None'}
 
 app.get('/api/ai/fix/recent', asyncHandler(async (req, res) => {
   const db = getDb();
-  const fixes = await db.all(`SELECT * FROM ai_fix_requests ORDER BY created_at DESC LIMIT 5`);
+  const fixes = await db.all('ai_fix_plans', {}, { orderBy: 'created_at', order: 'desc', limit: 5 });
   res.json(fixes);
 }));
 

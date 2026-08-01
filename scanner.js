@@ -6,7 +6,7 @@ import { randomUUID } from 'crypto';
 export async function runScan(scanId, repoUrl, deployUrl) {
   const db = getDb();
   
-  await db.run(`UPDATE scans SET status = 'running' WHERE id = ?`, [scanId]);
+  await db.update('scans', { status: 'running' }, { id: scanId });
   
   const emit = (msg, p, isWarn = false) => {
     scanEmitter.emit(`scan:${scanId}`, { log: msg, p, isWarn });
@@ -217,27 +217,34 @@ export async function runScan(scanId, repoUrl, deployUrl) {
     
     // Save UI Nodes into journeys if any
     for (const node of nodes) {
-      await db.run(
-        `INSERT INTO journeys (id, scan_id, path, status, screenshot, errors, console_errors, network_errors, load_time, a11y_score, perf_score) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [node.id, node.scan_id, node.path, node.status, node.screenshot, node.errors, node.console_errors, node.network_errors, node.load_time, node.a11y_score, node.perf_score]
-      );
+      await db.insert('journeys', {
+        id: node.id, scan_id: node.scan_id, path: node.path, status: node.status, 
+        screenshot: node.screenshot, errors: node.errors, console_errors: node.console_errors, 
+        network_errors: node.network_errors, load_time: node.load_time, 
+        a11y_score: node.a11y_score, perf_score: node.perf_score
+      });
     }
     
     if (aiData && aiData.issues) {
       for (const iss of aiData.issues) {
-        await db.run(
-          `INSERT INTO issues (id, scan_id, title, status, severity, area, root_cause, patch, affected_url, affected_component, before_code, after_code, screenshot, console_error, network_error, stack_trace, confidence) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [iss.id, scanId, iss.title, iss.status, iss.severity, iss.area, iss.root_cause, iss.patch, iss.affected_url, iss.affected_component, iss.before_code, iss.after_code, finalScreenshot, iss.console_error, iss.network_error, iss.stack_trace, iss.confidence]
-        );
+        await db.insert('issues', {
+          id: iss.id, scan_id: scanId, title: iss.title, status: iss.status, severity: iss.severity, 
+          area: iss.area, root_cause: iss.root_cause, patch: iss.patch, affected_url: iss.affected_url, 
+          affected_component: iss.affected_component, before_code: iss.before_code, after_code: iss.after_code, 
+          screenshot: finalScreenshot, console_error: iss.console_error, network_error: iss.network_error, 
+          stack_trace: iss.stack_trace, confidence: iss.confidence
+        });
       }
     }
     
     if (aiData && aiData.flows) {
       for (const flow of aiData.flows) {
-        await db.run(
-          `INSERT INTO broken_flows (id, scan_id, name, score, fail_step, duration, screenshot, console_error, network_error, dom_snapshot, severity, confidence) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [flow.id, scanId, flow.name, flow.score, flow.fail_step, flow.duration, finalScreenshot, flow.console_error, flow.network_error, flow.dom_snapshot, flow.severity, flow.confidence]
-        );
+        await db.insert('broken_flows', {
+          id: flow.id, scan_id: scanId, name: flow.name, score: flow.score, fail_step: flow.fail_step, 
+          duration: flow.duration, screenshot: finalScreenshot, console_error: flow.console_error, 
+          network_error: flow.network_error, dom_snapshot: flow.dom_snapshot, severity: flow.severity, 
+          confidence: flow.confidence
+        });
       }
     }
     
@@ -249,21 +256,15 @@ export async function runScan(scanId, repoUrl, deployUrl) {
     const arch = aiData?.architecture || 'Microservices Architecture';
     const repSummary = aiData?.repository_summary || 'Standard web application repository.';
     
-    await db.run(
-      `UPDATE scans SET status = 'completed', score = ?, api_failures = ?, error_message = NULL WHERE id = ?`,
-      [finalScore, apiFails, scanId]
-    );
+    await db.update('scans', { status: 'completed', score: finalScore, api_failures: apiFails, error_message: null }, { id: scanId });
     
-    await db.run(
-      `UPDATE repositories SET framework = ?, language = ?, architecture = ?, readme_summary = ? WHERE id = (SELECT repository_id FROM scans WHERE id = ?)`,
-      [framework, language, arch, repSummary, scanId]
-    );
+    const scanRow = await db.get('scans', { id: scanId });
+    if (scanRow && scanRow.repository_id) {
+      await db.update('repositories', { framework, language, architecture: arch, readme_summary: repSummary }, { id: scanRow.repository_id });
+    }
     
     const reportId = `rep-${randomUUID().split('-')[0]}`;
-    await db.run(
-      `INSERT INTO reports (id, scan_id, summary) VALUES (?, ?, ?)`,
-      [reportId, scanId, `Scan completed with ${brokenFlows} broken flows and ${apiFails} API failures.`]
-    );
+    await db.insert('reports', { id: reportId, scan_id: scanId, summary: `Scan completed with ${brokenFlows} broken flows and ${apiFails} API failures.` });
     
     emit("Report saved...", 95);
     await sleep(400);
@@ -274,7 +275,7 @@ export async function runScan(scanId, repoUrl, deployUrl) {
     console.error("Scan Error:", error);
     let errorMsg = error.message;
     if (!errorMsg || errorMsg.trim() === '') errorMsg = 'Pipeline crashed.';
-    await db.run(`UPDATE scans SET status = 'failed', error_message = ? WHERE id = ?`, [errorMsg, scanId]);
+    await db.update('scans', { status: 'failed', error_message: errorMsg }, { id: scanId });
     emit(errorMsg, 100, true);
   }
 }
