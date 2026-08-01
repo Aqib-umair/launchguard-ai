@@ -363,8 +363,8 @@ ${issue.stack_trace || 'None'}
 
     const fixId = `FIX-${randomUUID().split('-')[0].toUpperCase()}`;
     await db.run(
-      `INSERT INTO ai_fix_requests (id, issue_id, scan_id, model, response_json, execution_time) VALUES (?, ?, ?, ?, ?, ?)`,
-      [fixId, issueId, scan?.id, model || (mode === 'local' ? 'ollama/llama3' : 'google/gemini-2.5-flash'), JSON.stringify(parsedResponse), 1200]
+      `INSERT INTO ai_fix_plans (id, issue_id, problem_analysis, engineering_solution, developer_prompt, ide_usage_guide, model) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [fixId, issueId, JSON.stringify(parsedResponse.problem_analysis), JSON.stringify(parsedResponse.engineering_solution), parsedResponse.developer_prompt, parsedResponse.ide_usage_guide, model || (mode === 'local' ? 'ollama/llama3' : 'google/gemini-2.5-flash')]
     );
 
     console.log(`[AI Fix Assistant] Final JSON output generated & saved to database.`);

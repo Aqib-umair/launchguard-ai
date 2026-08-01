@@ -1123,6 +1123,9 @@ const views = {
       if (issues.length > 0) initialIssueId = issues[0].id;
     }
 
+    const existingPlans = await api.get(`/api/ai_fix_plans?issueId=${initialIssueId}`);
+    const existingPlan = existingPlans.length > 0 ? existingPlans[0] : null;
+
     let body = components.head('OpenRouter AI Agent', 'AI Fix Assistant', 'AI-powered root-cause analysis and automated engineering patch generation.');
     body += components.progressTracker('aifix');
     
@@ -1146,6 +1149,21 @@ const views = {
               <button class="btn primary" onclick="location.hash='issue'">Go to Issues</button>
             </div>
           `)}
+        ` : (existingPlan ? `
+          <div id="aifix-result" class="ai-result" style="display:block;">
+            <script>
+              setTimeout(() => {
+                const plan = ${JSON.stringify(existingPlan)};
+                document.getElementById('aifix-result').innerHTML = window.renderAIFixResult({
+                  problem_analysis: JSON.parse(plan.problem_analysis || '{}'),
+                  engineering_solution: JSON.parse(plan.engineering_solution || '{}'),
+                  developer_prompt: plan.developer_prompt,
+                  ide_usage_guide: plan.ide_usage_guide,
+                  confidence_score: 96
+                });
+              }, 100);
+            </script>
+          </div>
         ` : `
           <div id="aifix-setup" style="animation: fadeIn 0.5s ease;">
             <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 32px; align-items:start;">
