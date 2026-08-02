@@ -446,6 +446,12 @@ app.use(express.static(__dirname));
 // ── Catch-all → index.html ────────────────────────────────────
 app.use((req, res, next) => {
   if (req.path.startsWith('/api/')) return next();
+  
+  // Do not serve index.html for static file requests (e.g. .js, .css, .png, .ico)
+  if (req.path.match(/\.[a-z0-9]+$/i)) {
+    return res.status(404).send('Not found');
+  }
+  
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
