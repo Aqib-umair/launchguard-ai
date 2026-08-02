@@ -1,8 +1,9 @@
 import { supabase } from './lib/supabase.js';
 import { analyzeScanData } from './ai.js';
 import { randomUUID } from 'crypto';
-import playwright from 'playwright';
-import AxeBuilder from '@axe-core/playwright';
+// NOTE: playwright and @axe-core/playwright are lazy-imported inside runScan()
+// to prevent Vercel serverless from crashing on import (no Playwright binaries at startup)
+
 
 export async function runScan(scanId, repoUrl, deployUrl) {
   
@@ -89,9 +90,14 @@ export async function runScan(scanId, repoUrl, deployUrl) {
         await logTerminal("Running Tests", 37);
         await logTerminal("Launching Playwright", 40);
         
+        // Lazy-import to avoid Vercel crash at module load time
+        const { default: playwright } = await import('playwright');
+        const { default: AxeBuilder } = await import('@axe-core/playwright');
+        
         browser = await playwright.chromium.launch({ headless: true });
         const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, userAgent: 'LaunchGuard-AI-Agent/1.0' });
         const page = await context.newPage();
+
         
         page.on('console', msg => {
           const text = msg.text();
