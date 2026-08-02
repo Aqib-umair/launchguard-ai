@@ -22,6 +22,17 @@ const store = {
 
 let currentUser = store.getJSON('user');
 
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+
+let supabaseClient = null;
+async function initSupabase() {
+  const config = await api.get('/api/config');
+  if (config.supabaseUrl) {
+    supabaseClient = createClient(config.supabaseUrl, config.supabaseAnonKey);
+  }
+}
+initSupabase();
+
 const api = {
   get: async (path) => { try { return await (await fetch(path)).json(); } catch(e) { console.error('fetch failed', e); return {}; } },
   post: async (path, body) => { try { return await (await fetch(path, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) })).json(); } catch(e) { console.error('fetch failed', e); return {}; } }
@@ -161,8 +172,8 @@ const actions = {
     
     if (!name || !email) return alert("Required fields missing.");
     
-    // Pure frontend mock authentication as requested
-    currentUser = { id: Date.now(), name, email, username };
+    const res = await api.post('/api/login', { name, email, github_username: username });
+    currentUser = res.user;
     store.setJSON('user', currentUser);
     location.hash = 'report';
   },
@@ -695,27 +706,38 @@ const views = {
     app.innerHTML = components.shell('Live scans', 'progress', body);
     bindEvents();
     
-    const source = new EventSource(`/api/scans/${scanId}/stream`);
-    source.onmessage = (event) => {
-      if (!document.getElementById('prog-bar')) return source.close();
-      const st = JSON.parse(event.data);
-      document.getElementById('prog-bar').style.width = st.p + '%';
-      document.getElementById('prog-perc').innerText = st.p + '%';
-      
-      const termEl = document.createElement('div');
-      termEl.className = st.isWarn ? 'warn' : (st.log.includes('✓') ? 'ok' : 'cyan');
-      termEl.className += ' anim-slide-in';
-      termEl.style.whiteSpace = 'pre-wrap';
-      termEl.innerText = st.log;
-      const tw = document.getElementById('prog-term');
-      tw.appendChild(termEl);
-      tw.scrollTop = tw.scrollHeight;
-      
-      if (st.p >= 100) {
-        source.close();
-        setTimeout(() => location.hash = 'replay', 1500);
-      }
-    };
+    
+    if (!supabaseClient) {
+      console.warn("Supabase not initialized for realtime");
+      return;
+    }
+    const channel = supabaseClient
+      .channel('schema-db-changes')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'scan_logs', filter: `scan_id=eq.${scanId}` }, (payload) => {
+        if (!document.getElementById('prog-bar')) return supabaseClient.removeChannel(channel);
+        
+        const st = payload.new;
+        document.getElementById('prog-bar').style.width = st.progress + '%';
+        document.getElementById('prog-perc').innerText = st.progress + '%';
+        
+        const termEl = document.createElement('div');
+        termEl.className = st.is_warn ? 'warn' : (st.message.includes('✓') ? 'ok' : 'cyan');
+        termEl.className += ' anim-slide-in';
+        termEl.style.whiteSpace = 'pre-wrap';
+        termEl.innerText = st.message;
+        const tw = document.getElementById('prog-term');
+        if (tw) {
+          tw.appendChild(termEl);
+          tw.scrollTop = tw.scrollHeight;
+        }
+        
+        if (st.progress >= 100) {
+          supabaseClient.removeChannel(channel);
+          setTimeout(() => location.hash = 'replay', 1500);
+        }
+      })
+      .subscribe();
+
   },
 
   replay: async () => {
@@ -728,7 +750,7 @@ const views = {
           <div style="font-size:11px; margin-top:8px; color:var(--cyan)">Severity: ${f.severity}</div>
         `, 'lift', `style="margin-bottom:12px;"`)).join('');
         
-    if(!flows.length) flowList = `<div class="card" style="text-align:center; padding:30px;">No broken flows detected in latest scan.</div>`;
+    if(!flows.length) flowList = `<div class="card" style="text-align:center; padding:30px;"></div>`;
 
     const active = flows[0];
     let timeline = `<div style="text-align:center; color:var(--muted); padding:30px;">No data</div>`;
@@ -811,7 +833,7 @@ const views = {
     `;
 
     if (!nodes.length) {
-      body += components.card(`<div style="text-align:center; padding: 40px; color:var(--muted);">No pages mapped. Run a scan.</div>`);
+      body += components.card(`<div style="text-align:center; padding: 40px; color:var(--muted);">. Run a scan.</div>`);
     } else {
       // 1. Calculate Summary Metrics
       const total = nodes.length;
@@ -1008,7 +1030,7 @@ const views = {
     let body = components.head('Evaluation suite', 'Dynamic Evals', 'AI-generated assertions testing critical DOM state.');
     body += components.progressTracker('eval');
     
-    let table = `<tr><td colspan="4" style="text-align:center; padding: 40px;">No evals generated.</td></tr>`;
+    let table = `<tr><td colspan="4" style="text-align:center; padding: 40px;"></td></tr>`;
     if (evals.length > 0) {
       table = evals.map(e => `
         <tr>
@@ -1038,7 +1060,7 @@ const views = {
     let body = components.head('Bug tracker', 'Issues & Alerts', 'AI-detected regressions from Playwright DOM logs.');
     body += components.progressTracker('issue');
     
-    let issuesContent = `<div style="text-align:center; padding: 40px; color:var(--muted);">No issues detected.</div>`;
+    let issuesContent = `<div style="text-align:center; padding: 40px; color:var(--muted);"></div>`;
     if (issues.length > 0) {
       issuesContent = `<div style="display:grid; gap:24px;">` + issues.map(i => `
         <div class="card" style="border-left: 3px solid var(--red);">
@@ -1120,11 +1142,11 @@ const views = {
             <div class="eyebrow">Diagnostic Logs</div>
             <h3 style="margin-bottom:12px; font-size:16px;">Stack Trace / Errors</h3>
             <div style="background:rgba(255,109,117,0.05); border:1px solid rgba(255,109,117,0.2); border-radius:6px; padding:16px; font-family:'DM Mono'; font-size:11px; color:var(--red); overflow-x:auto; white-space:pre-wrap; min-height:150px; margin-bottom:24px;">
-              ${targetIssue.stack_trace || 'No stack trace available.'}
+              ${targetIssue.stack_trace || ''}
             </div>
             
             <h3 style="margin-bottom:12px; font-size:16px;">Screenshot Evidence</h3>
-            ${targetIssue.screenshot ? `<img src="${targetIssue.screenshot}" style="width:100%; border-radius:6px; border:1px solid var(--line);">` : `<div style="padding:40px; text-align:center; background:#080b0e; border:1px solid var(--line); border-radius:6px; color:var(--muted); font-size:12px;">Screenshot not available</div>`}
+            ${targetIssue.screenshot ? `<img src="${targetIssue.screenshot}" style="width:100%; border-radius:6px; border:1px solid var(--line);">` : `<div style="padding:40px; text-align:center; background:#080b0e; border:1px solid var(--line); border-radius:6px; color:var(--muted); font-size:12px;"></div>`}
           `)}
         </div>
       </div>`;
@@ -1315,8 +1337,8 @@ const views = {
               const mainContainer = document.querySelector('#aifix-setup').parentNode;
               mainContainer.innerHTML = \`
                 <div style="text-align:center; padding: 40px; background:rgba(255,77,77,0.05); border:1px solid rgba(255,77,77,0.2); border-radius:8px; margin-top:40px;">
-                  <h2 style="color:var(--red); margin-bottom:16px;">AI Analysis Failed</h2>
-                  <p style="color:var(--muted); margin-bottom:32px;">Reason: Local AI is unavailable because Ollama is not running on port 11434.</p>
+                  <h2 style="color:var(--red); margin-bottom:16px;">AI Engine Offline</h2>
+                  <p style="color:var(--muted); margin-bottom:32px;">Reason: AI connection refused. on port 11434.</p>
                   <button class="btn ghost" onclick="location.hash='aifix?id=\${issueId}'" style="border:1px solid var(--line);">Retry or Change AI Model</button>
                 </div>\`;
               return;
@@ -1374,7 +1396,7 @@ const views = {
             result.style.display = 'block';
             result.innerHTML = \`
               <div style="background: rgba(255, 77, 77, 0.05); border: 1px solid var(--red); border-radius: 8px; padding: 24px; text-align:center;">
-                <div style="font-weight:bold; color:var(--red); font-size:18px; margin-bottom:8px;">AI Analysis Failed</div>
+                <div style="font-weight:bold; color:var(--red); font-size:18px; margin-bottom:8px;">AI Engine Offline</div>
                 <div style="color:var(--text); font-size:14px; margin-bottom:24px;">Reason: \${err.message}</div>
                 <div style="display:flex; gap:12px; justify-content:center;">
                   <button class="btn primary" onclick="window.generateAIFix('\${issueId}', '\${mode}', '\${model}', '')">Retry</button>
