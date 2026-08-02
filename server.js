@@ -20,9 +20,18 @@ app.use(express.json({ limit: '50mb' }));
 
 const asyncHandler = (fn) => (req, res, next) => {
   Promise.resolve(fn(req, res, next)).catch((err) => {
-    console.error(JSON.stringify({ endpoint: req.originalUrl, method: req.method, error: err.message, stack: err.stack }));
+    console.error('[BACKEND ERROR]', JSON.stringify({ 
+      endpoint: req.originalUrl, 
+      method: req.method, 
+      error: err.message, 
+      stack: err.stack 
+    }));
     if (!res.headersSent) {
-      res.status(500).json({ error: err.message, stack: process.env.NODE_ENV === 'development' ? err.stack : undefined });
+      res.status(500).json({ 
+        success: false, 
+        error: err.message, 
+        stack: err.stack
+      });
     }
   });
 };
@@ -483,9 +492,21 @@ app.get('/api/ai/fix/recent', asyncHandler(async (req, res) => {
   res.json(fixes || []);
 }));
 
-app.use('/api', (req, res) => res.status(404).json({ error: 'API endpoint not found.' }));
+app.use('/api', (req, res) => res.status(404).json({ success: false, error: 'API endpoint not found: ' + req.originalUrl }));
 app.use(express.static(__dirname));
 app.use((req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+
+// Global error handler - MUST be last and MUST return JSON
+app.use((err, req, res, next) => {
+  console.error('[GLOBAL ERROR HANDLER]', err.message, err.stack);
+  if (res.headersSent) return next(err);
+  res.status(err.status || 500).json({
+    success: false,
+    error: err.message || 'Internal server error',
+    stack: err.stack
+  });
+});
+
 
 if (!process.env.VERCEL) {
   const port = process.env.PORT || 3000;
