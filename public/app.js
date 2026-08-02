@@ -249,10 +249,16 @@ const actions = {
       if (contentType.includes('application/json')) {
         data = JSON.parse(text);
       } else {
-        console.error(`[AUTH] Non-JSON response from ${url}`);
+        console.error(`[AUTH] Non-JSON response from ${res.url}`);
         console.error(`Status: ${res.status}`);
-        console.error(`Body: ${text}`);
-        alert('Server returned HTML instead of JSON. See console for details.');
+        console.error(`Content-Type: ${contentType}`);
+        console.error(`Body: ${text.substring(0, 500)}...`);
+        
+        let serverIdentity = "Unknown";
+        if (text.includes("Vercel")) serverIdentity = "Vercel Edge/Serverless Error";
+        if (text.includes("<html")) serverIdentity = "HTML Document (possibly index.html fallback)";
+        
+        alert(`Server returned HTML instead of JSON.\nStatus: ${res.status}\nURL: ${res.url}\nType: ${contentType}\nSource: ${serverIdentity}\n\nCheck console for details.`);
         submitBtn.disabled = false;
         submitBtn.innerText = isRegister ? 'Create Account' : 'Login';
         return;
