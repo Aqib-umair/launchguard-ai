@@ -183,6 +183,12 @@ const actions = {
     const deployUrl = form.deployUrl.value.trim();
     
     const res = await api.post('/api/scans', { name, repoUrl, deployUrl });
+    if (!res.id) {
+      alert(res.error || "Failed to start scan. Please check server logs.");
+      submitBtn.innerText = "Start Scan →";
+      submitBtn.disabled = false;
+      return;
+    }
     store.set('activeScanId', res.id);
     store.setJSON('activeScanData', { name, repoUrl, deployUrl });
     store.set('hasScanned', 'true');

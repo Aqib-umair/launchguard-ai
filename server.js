@@ -195,9 +195,14 @@ app.post('/api/scans', asyncHandler(async (req, res) => {
   }
   
   const id = `SCAN-LG-2026-${randomUUID().split('-')[0].toUpperCase()}`;
-  await db.insert('scans', { id, repository_id: repoId, name, deploy_url: deployUrl, status: 'queued' });
-  runScan(id, repoUrl, deployUrl);
-  res.status(201).json({ id, name, status: 'queued' });
+  try {
+    await db.insert('scans', { id, repository_id: repoId, name, deploy_url: deployUrl, status: 'queued' });
+    runScan(id, repoUrl, deployUrl);
+    res.status(201).json({ id, name, status: 'queued' });
+  } catch(e) {
+    console.error("Failed to insert scan:", e);
+    res.status(500).json({ error: "Failed to initialize scan in database: " + e.message });
+  }
 }));
 
 app.get('/api/scans', asyncHandler(async (req, res) => {
@@ -213,7 +218,13 @@ app.get('/api/scans/:id/stream', asyncHandler(async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
 
   const db = getDb();
-  const scan = await db.get('scans', { id });
+  let scan;
+  try {
+    scan = await db.get('scans', { id });
+  } catch(e) {
+    res.write(`data: ${JSON.stringify({ log: 'Error fetching scan: ' + e.message, p: 100, isWarn: true })}\n\n`);
+    return res.end();
+  }
   
   if (!scan) {
     res.write(`data: ${JSON.stringify({ log: 'Scan not found.', p: 100, isWarn: true })}\n\n`);

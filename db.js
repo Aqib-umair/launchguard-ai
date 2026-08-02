@@ -3,6 +3,75 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 let dbInstance = null;
+const memoryStore = {};
+
+class MemoryAdapter {
+  async insert(table, data) {
+    if (!memoryStore[table]) memoryStore[table] = [];
+    if (!data.id) data.id = Math.random().toString(36).substr(2, 9);
+    memoryStore[table].push(data);
+    return { lastID: data.id };
+  }
+  
+  async update(table, data, where) {
+    if (!memoryStore[table]) return true;
+    for (let i = 0; i < memoryStore[table].length; i++) {
+      const item = memoryStore[table][i];
+      let match = true;
+      for (const [k, v] of Object.entries(where)) {
+        if (item[k] !== v) { match = false; break; }
+      }
+      if (match) {
+        memoryStore[table][i] = { ...item, ...data };
+      }
+    }
+    return true;
+  }
+  
+  async get(table, where = {}, options = {}) {
+    if (!memoryStore[table]) return null;
+    let results = memoryStore[table].filter(item => {
+      for (const [k, v] of Object.entries(where)) {
+        if (item[k] !== v) return false;
+      }
+      return true;
+    });
+    
+    if (options.orderBy) {
+      results.sort((a, b) => {
+        if (a[options.orderBy] < b[options.orderBy]) return options.order === 'asc' ? -1 : 1;
+        if (a[options.orderBy] > b[options.orderBy]) return options.order === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+    return results.length > 0 ? results[0] : null;
+  }
+  
+  async all(table, where = {}, options = {}) {
+    if (!memoryStore[table]) return [];
+    let results = memoryStore[table].filter(item => {
+      for (const [k, v] of Object.entries(where)) {
+        if (item[k] !== v) return false;
+      }
+      return true;
+    });
+    
+    if (options.orderBy) {
+      results.sort((a, b) => {
+        if (a[options.orderBy] < b[options.orderBy]) return options.order === 'asc' ? -1 : 1;
+        if (a[options.orderBy] > b[options.orderBy]) return options.order === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+    if (options.limit) return results.slice(0, options.limit);
+    return results;
+  }
+  
+  async raw(sql, params) {
+    console.warn("[MemoryDB] raw() is not supported.");
+  }
+}
+
 
 class SupabaseAdapter {
   constructor(url, key) {
@@ -67,10 +136,8 @@ export async function initDb() {
   const key = process.env.SUPABASE_ANON_KEY;
   
   if (!url || !key) {
-    console.error("[DB] FATAL ERROR: Supabase credentials not found. Ensure SUPABASE_URL and SUPABASE_ANON_KEY are set in the environment.");
-    // Wait, the client will fail to construct if url/key are undefined.
-    // So we just pass empty strings so it fails downstream instead of crashing server.js initialization.
-    dbInstance = new SupabaseAdapter(url || 'https://mock.supabase.co', key || 'mock');
+    console.warn("[DB] WARNING: Supabase credentials not found. Falling back to MemoryAdapter (local session only).");
+    dbInstance = new MemoryAdapter();
     return;
   }
   
