@@ -5,46 +5,25 @@
 import express from 'express';
 import cors from 'cors';
 import fs from 'fs';
-import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import { supabase, supabaseAdmin } from './lib/supabase.js';
 
 dotenv.config();
 
 // ── Startup env audit ──────────────────────────────────────────
-console.log('[STARTUP] Environment variable audit:', {
-  SUPABASE_URL:             !!process.env.SUPABASE_URL,
-  SUPABASE_ANON_KEY:        !!process.env.SUPABASE_ANON_KEY,
-  SUPABASE_SERVICE_ROLE_KEY:!!process.env.SUPABASE_SERVICE_ROLE_KEY,
-  OPENROUTER_API_KEY:       !!process.env.OPENROUTER_API_KEY,
-  GEMINI_API_KEY:           !!process.env.GEMINI_API_KEY,
-  VERCEL:                   !!process.env.VERCEL,
-});
+if (!process.env.SUPABASE_URL) console.error('SUPABASE_URL is missing.');
+else console.log('SUPABASE_URL exists.');
+
+if (!process.env.SUPABASE_ANON_KEY) console.error('SUPABASE_ANON_KEY is missing.');
+else console.log('SUPABASE_ANON_KEY exists.');
+
+if (!process.env.SUPABASE_SERVICE_ROLE_KEY) console.error('SUPABASE_SERVICE_ROLE_KEY is missing.');
+else console.log('SUPABASE_SERVICE_ROLE_KEY exists.');
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-// ── Supabase clients ───────────────────────────────────────────
-// Anon client (used for sign-in)
-const supabase = (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY)
-  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
-  : null;
-
-if (!supabase) {
-  console.error('[STARTUP] WARNING: supabase anon client NOT initialized (missing SUPABASE_URL or SUPABASE_ANON_KEY)');
-}
-
-// Admin client (used for createUser, service operations)
-const supabaseAdmin = (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY)
-  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
-      auth: { autoRefreshToken: false, persistSession: false }
-    })
-  : null;
-
-if (!supabaseAdmin) {
-  console.error('[STARTUP] WARNING: supabaseAdmin NOT initialized (missing SUPABASE_SERVICE_ROLE_KEY)');
-}
 
 // ── Express app ────────────────────────────────────────────────
 const app = express();
@@ -78,29 +57,17 @@ async function getLatestScanId() {
 // ══════════════════════════════════════════════════════════════
 
 // ── Health check ───────────────────────────────────────────────
-app.get('/api/health', asyncHandler(async (req, res) => {
-  let supabaseStatus = 'not_configured';
-  if (supabase) {
-    try {
-      const { error } = await supabase.from('users').select('id').limit(1);
-      supabaseStatus = error ? `error: ${error.message}` : 'connected';
-    } catch (e) {
-      supabaseStatus = `exception: ${e.message}`;
-    }
-  }
+app.get('/api/health', (req, res) => {
   res.json({
-    status: 'ok',
-    server: 'running',
-    supabase: supabaseStatus,
-    env: {
-      SUPABASE_URL:              !!process.env.SUPABASE_URL,
-      SUPABASE_ANON_KEY:         !!process.env.SUPABASE_ANON_KEY,
-      SUPABASE_SERVICE_ROLE_KEY: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
-      OPENROUTER_API_KEY:        !!process.env.OPENROUTER_API_KEY,
-    },
-    ts: new Date().toISOString(),
+    server: "running",
+    supabase: {
+      url: !!process.env.SUPABASE_URL,
+      anon: !!process.env.SUPABASE_ANON_KEY,
+      service: !!process.env.SUPABASE_SERVICE_ROLE_KEY
+    }
   });
-}));
+});
+
 
 // ── Config ────────────────────────────────────────────────────
 app.get('/api/config', (req, res) => {
@@ -122,16 +89,17 @@ app.post('/api/auth/signup', asyncHandler(async (req, res) => {
   const { name, email, password, github_username } = req.body;
   console.log('[SIGNUP] Step 1: request received for', email);
 
-  if (!supabaseAdmin) {
-    return res.status(500).json({ success: false, error: 'Server misconfigured: SUPABASE_SERVICE_ROLE_KEY missing.' });
+  if (!supabase || !supabaseAdmin) {
+    return res.status(500).json({ success: false, error: 'Server misconfigured: Supabase clients missing.' });
   }
 
-  console.log('[SIGNUP] Step 2: calling supabaseAdmin.auth.admin.createUser');
-  const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+  console.log('[SIGNUP] Step 2: calling supabase.auth.signUp');
+  const { data: authData, error: authError } = await supabase.auth.signUp({
     email,
     password,
-    email_confirm: true,
-    user_metadata: { full_name: name, github_username },
+    options: {
+      data: { full_name: name, github_username }
+    }
   });
 
   if (authError) {
@@ -162,8 +130,8 @@ app.post('/api/auth/signup', asyncHandler(async (req, res) => {
   }
 
   console.log('[SIGNUP] Step 3 OK: public.users row created, id =', profile.id);
-  console.log('[SIGNUP] Step 4: returning success response');
-  res.json({ success: true, user: profile, authUserId });
+  console.log('[SIGNUP] Step 4: returning success response with session');
+  res.json({ success: true, user: profile, authUserId, session: authData.session });
 }));
 
 // ── Login ─────────────────────────────────────────────────────

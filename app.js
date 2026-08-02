@@ -253,8 +253,8 @@ const actions = {
         console.log('[AUTH] Step 4a: session tokens stored.');
       }
 
-      console.log('[AUTH] Step 5: redirecting to dashboard (report)');
-      location.hash = 'report';
+      console.log('[AUTH] Step 5: redirecting to dashboard');
+      location.hash = 'dashboard';
 
     } catch (err) {
       console.error('[AUTH] Unexpected error:', err);
@@ -670,7 +670,7 @@ const views = {
     </div>`;
   },
   
-  report: async () => { console.log("renderDashboard()");
+  dashboard: async () => { console.log("renderDashboard()");
     const data = await api.get('/api/dashboard');
     const greeting = `Hi, ${currentUser ? currentUser.name : 'Developer'} 👋`;
     
@@ -1673,7 +1673,7 @@ const router = async () => {
     return;
   }
   if (currentUser && ['landing', 'login', 'register', ''].includes(viewName)) {
-    location.hash = 'report';
+    location.hash = 'dashboard';
     return;
   }
   
@@ -1682,7 +1682,7 @@ const router = async () => {
   if (viewName === 'login') views.auth(false);
   else if (viewName === 'register') views.auth(true);
   else if (views[viewName]) await views[viewName]();
-  else await views.report();
+  else await views.dashboard();
   } catch(e) { console.error("Router crashed", e); location.hash = ""; }
 };
 
