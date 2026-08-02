@@ -29,9 +29,20 @@ async function getLatestScanId() {
 }
 
 app.get('/api/config', (req, res) => {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_ANON_KEY;
+  if (!url || !key) {
+    return res.status(500).json({
+      success: false,
+      error: 'Missing Supabase configuration in environment variables.',
+      supabaseUrl: null,
+      supabaseAnonKey: null
+    });
+  }
   res.json({
-    supabaseUrl: process.env.SUPABASE_URL,
-    supabaseAnonKey: process.env.SUPABASE_ANON_KEY
+    success: true,
+    supabaseUrl: url,
+    supabaseAnonKey: key
   });
 });
 

@@ -13,8 +13,26 @@ console.log('app.js loaded');
 document.addEventListener('DOMContentLoaded', () => { console.log('DOMContentLoaded'); });
 
 const api = {
-  get: async (path) => { try { return await (await fetch(path)).json(); } catch(e) { console.error('fetch failed', e); return {}; } },
-  post: async (path, body) => { try { return await (await fetch(path, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) })).json(); } catch(e) { console.error('fetch failed', e); return {}; } }
+  get: async (path) => { 
+    try { 
+      const res = await fetch(path);
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(path + " failed: " + text);
+      }
+      return await res.json(); 
+    } catch(e) { console.error('fetch failed', e); return {}; } 
+  },
+  post: async (path, body) => { 
+    try { 
+      const res = await fetch(path, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(path + " failed: " + text);
+      }
+      return await res.json(); 
+    } catch(e) { console.error('fetch failed', e); return {}; } 
+  }
 };
 
 let supabaseClient = null;
@@ -32,7 +50,11 @@ const store = {
   get: k => localStorage.getItem(k),
   set: (k, v) => localStorage.setItem(k, v),
   del: k => localStorage.removeItem(k),
-  getJSON: k => JSON.parse(localStorage.getItem(k) || 'null'),
+  getJSON: k => {
+    const val = localStorage.getItem(k);
+    if (!val || val === 'undefined') return null;
+    try { return JSON.parse(val); } catch(e) { return null; }
+  },
   setJSON: (k, v) => localStorage.setItem(k, JSON.stringify(v)),
 };
 
