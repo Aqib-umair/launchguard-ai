@@ -1,3 +1,5 @@
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+
 window.onerror = function(msg, url, line, col, err) {
   console.error('Global window error:', msg, err);
   if(document.body) document.body.innerHTML += '<div style="padding:40px;font-family:sans-serif;background:rgba(255,0,0,0.9);color:white;position:fixed;top:0;left:0;z-index:9999;width:100%;height:100%;"><h1>Frontend Crash (onerror)</h1><pre>' + (err ? err.stack : msg) + '</pre></div>';
@@ -10,6 +12,20 @@ window.onunhandledrejection = function(e) {
 console.log('app.js loaded');
 document.addEventListener('DOMContentLoaded', () => { console.log('DOMContentLoaded'); });
 
+const api = {
+  get: async (path) => { try { return await (await fetch(path)).json(); } catch(e) { console.error('fetch failed', e); return {}; } },
+  post: async (path, body) => { try { return await (await fetch(path, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) })).json(); } catch(e) { console.error('fetch failed', e); return {}; } }
+};
+
+let supabaseClient = null;
+async function initSupabase() {
+  const config = await api.get('/api/config');
+  if (config.supabaseUrl) {
+    supabaseClient = createClient(config.supabaseUrl, config.supabaseAnonKey);
+  }
+}
+initSupabase();
+
 try {
 // Utilities & Storage
 const store = {
@@ -21,22 +37,6 @@ const store = {
 };
 
 let currentUser = store.getJSON('user');
-
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
-
-let supabaseClient = null;
-async function initSupabase() {
-  const config = await api.get('/api/config');
-  if (config.supabaseUrl) {
-    supabaseClient = createClient(config.supabaseUrl, config.supabaseAnonKey);
-  }
-}
-initSupabase();
-
-const api = {
-  get: async (path) => { try { return await (await fetch(path)).json(); } catch(e) { console.error('fetch failed', e); return {}; } },
-  post: async (path, body) => { try { return await (await fetch(path, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) })).json(); } catch(e) { console.error('fetch failed', e); return {}; } }
-};
 
 let app = document.querySelector('#app');
 if (!app) {
