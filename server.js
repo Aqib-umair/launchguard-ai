@@ -2,11 +2,15 @@ import express from 'express';
 import { GoogleGenAI } from '@google/genai';
 import fs from 'fs';
 import cors from 'cors';
+import { createClient } from '@supabase/supabase-js';
 import { supabase } from './lib/supabase.js';
 import { runScan } from './scanner.js';
-import { randomUUID } from 'crypto';
-import path from 'path';
-import { fileURLToPath } from 'url';
+
+// Supabase admin client (service role) for creating users server-side
+const supabaseAdmin = (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY)
+  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { autoRefreshToken: false, persistSession: false } })
+  : null;
+
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -47,25 +51,110 @@ app.get('/api/config', (req, res) => {
 });
 
 // API Routes
-app.post('/api/login', asyncHandler(async (req, res) => {
-  const { name, email, github_username, avatar } = req.body;
-  let { data: user } = await supabase.from('users').select('*').eq('email', email).single();
-  
-  if (!user) {
-    const { data } = await supabase.from('users').insert([{ 
-      name, email, github_username, avatar, 
-      login_timestamp: new Date().toISOString(), 
-      last_login: new Date().toISOString() 
-    }]).select().single();
-    user = data;
-  } else {
-    const { data } = await supabase.from('users').update({ 
-      last_login: new Date().toISOString() 
-    }).eq('email', email).select().single();
-    user = data;
+
+// ── SIGNUP ──────────────────────────────────────────────────────────────────
+app.post('/api/auth/signup', asyncHandler(async (req, res) => {
+  const { name, email, password, github_username } = req.body;
+  console.log('[SIGNUP] Step 1: received signup request for', email);
+
+  if (!supabaseAdmin) {
+    return res.status(500).json({ error: 'Server misconfigured: SUPABASE_SERVICE_ROLE_KEY missing.' });
   }
-  res.json({ user });
+
+  // Step 2: Create auth user via Supabase Admin
+  const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: { full_name: name, github_username }
+  });
+
+  if (authError) {
+    console.error('[SIGNUP] Step 2 FAILED: Supabase auth error:', authError.message);
+    return res.status(400).json({ error: authError.message });
+  }
+
+  const authUserId = authData.user.id;
+  console.log('[SIGNUP] Step 2 OK: Auth user created, id =', authUserId);
+
+  // Step 3: Insert profile into public.users
+  const { data: profile, error: profileError } = await supabaseAdmin
+    .from('users')
+    .insert([{
+      auth_user_id: authUserId,
+      name,
+      email,
+      github_username: github_username || null,
+      login_timestamp: new Date().toISOString(),
+      last_login: new Date().toISOString()
+    }])
+    .select()
+    .single();
+
+  if (profileError) {
+    console.error('[SIGNUP] Step 3 FAILED: Could not insert into public.users:', profileError.message, profileError.details);
+    // Don't delete auth user, just report error
+    return res.status(500).json({ error: 'Profile creation failed: ' + profileError.message });
+  }
+
+  console.log('[SIGNUP] Step 3 OK: public.users row created, id =', profile.id);
+
+  // Step 4: Sign in immediately to generate session
+  const { data: sessionData, error: sessionError } = await supabaseAdmin.auth.admin.generateLink({
+    type: 'magiclink',
+    email
+  });
+
+  console.log('[SIGNUP] Step 4: Session ready. Returning profile.');
+  res.json({ success: true, user: profile, authUserId });
 }));
+
+// ── LOGIN ────────────────────────────────────────────────────────────────────
+app.post('/api/auth/login', asyncHandler(async (req, res) => {
+  const { email, password } = req.body;
+  console.log('[LOGIN] Step 1: received login request for', email);
+
+  if (!supabase) {
+    return res.status(500).json({ error: 'Server misconfigured: Supabase client not initialized.' });
+  }
+
+  // Step 2: Sign in with password via anon client
+  const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+
+  if (signInError) {
+    console.error('[LOGIN] Step 2 FAILED:', signInError.message);
+    return res.status(401).json({ error: signInError.message });
+  }
+
+  const authUserId = signInData.user.id;
+  console.log('[LOGIN] Step 2 OK: signed in, auth user id =', authUserId);
+
+  // Step 3: Update last_login in public.users
+  const { data: profile, error: profileError } = await supabaseAdmin
+    .from('users')
+    .update({ last_login: new Date().toISOString() })
+    .eq('auth_user_id', authUserId)
+    .select()
+    .single();
+
+  if (profileError) {
+    console.warn('[LOGIN] Step 3 WARNING: Could not update last_login:', profileError.message);
+  }
+
+  console.log('[LOGIN] Step 3 OK: profile fetched.');
+
+  res.json({
+    success: true,
+    user: profile || { email, auth_user_id: authUserId },
+    session: signInData.session
+  });
+}));
+
+// ── LEGACY /api/login fallback (no-op, redirect clients to new endpoints) ───
+app.post('/api/login', asyncHandler(async (req, res) => {
+  res.status(410).json({ error: 'Deprecated endpoint. Use /api/auth/signup or /api/auth/login.' });
+}));
+
 
 app.get('/api/reports/:scanId', asyncHandler(async (req, res) => {
   const { scanId } = req.params;

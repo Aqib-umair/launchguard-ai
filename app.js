@@ -188,20 +188,87 @@ const actions = {
   login: async (e, isRegister) => {
     e.preventDefault();
     const form = e.target;
-    const name = form.name.value.trim();
-    const email = form.email.value.trim();
-    const username = form.username ? form.username.value.trim() : null;
-    
-    if (!name || !email) return alert("Required fields missing.");
-    
-    const res = await api.post('/api/login', { name, email, github_username: username });
-    currentUser = res.user;
-    store.setJSON('user', currentUser);
-    location.hash = 'report';
+    const submitBtn = form.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    submitBtn.innerText = 'Authenticating...';
+
+    const name    = form.name    ? form.name.value.trim()    : '';
+    const email   = form.email   ? form.email.value.trim()   : '';
+    const password= form.password? form.password.value.trim(): '';
+    const username= form.username? form.username.value.trim(): '';
+
+    console.log('[AUTH] Step 1: form submitted. isRegister =', isRegister, 'email =', email);
+
+    if (!email || !password) {
+      alert('Email and password are required.');
+      submitBtn.disabled = false;
+      submitBtn.innerText = isRegister ? 'Create Account' : 'Login';
+      return;
+    }
+    if (isRegister && !name) {
+      alert('Full name is required for signup.');
+      submitBtn.disabled = false;
+      submitBtn.innerText = 'Create Account';
+      return;
+    }
+
+    try {
+      let res;
+      if (isRegister) {
+        console.log('[AUTH] Step 2: calling /api/auth/signup');
+        res = await fetch('/api/auth/signup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, email, password, github_username: username })
+        });
+      } else {
+        console.log('[AUTH] Step 2: calling /api/auth/login');
+        res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+      }
+
+      const data = await res.json();
+      console.log('[AUTH] Step 3: server response:', data);
+
+      if (!res.ok || !data.success) {
+        const msg = data.error || 'Authentication failed. Please try again.';
+        console.error('[AUTH] Step 3 FAILED:', msg);
+        alert(msg);
+        submitBtn.disabled = false;
+        submitBtn.innerText = isRegister ? 'Create Account' : 'Login';
+        return;
+      }
+
+      console.log('[AUTH] Step 4: setting currentUser in localStorage');
+      currentUser = data.user;
+      store.setJSON('user', currentUser);
+
+      // Store session tokens if provided
+      if (data.session) {
+        store.setJSON('session', { access_token: data.session.access_token, refresh_token: data.session.refresh_token });
+        console.log('[AUTH] Step 4a: session tokens stored.');
+      }
+
+      console.log('[AUTH] Step 5: redirecting to dashboard (report)');
+      location.hash = 'report';
+
+    } catch (err) {
+      console.error('[AUTH] Unexpected error:', err);
+      alert('An unexpected error occurred: ' + err.message);
+      submitBtn.disabled = false;
+      submitBtn.innerText = isRegister ? 'Create Account' : 'Login';
+    }
   },
   logout: () => {
     currentUser = null;
     store.del('user');
+    store.del('session');
+    store.del('activeScanId');
+    store.del('hasScanned');
+    console.log('[AUTH] Logged out. Redirecting to landing.');
     location.hash = 'landing';
   },
   startScan: async (e) => {
