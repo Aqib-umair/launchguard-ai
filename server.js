@@ -60,11 +60,12 @@ async function getLatestScanId() {
 app.get('/api/health', (req, res) => {
   res.json({
     server: "running",
-    supabase: {
-      url: !!process.env.SUPABASE_URL,
-      anon: !!process.env.SUPABASE_ANON_KEY,
-      service: !!process.env.SUPABASE_SERVICE_ROLE_KEY
-    }
+    env: {
+      SUPABASE_URL: !!process.env.SUPABASE_URL,
+      SUPABASE_ANON_KEY: !!process.env.SUPABASE_ANON_KEY,
+      SUPABASE_SERVICE_ROLE_KEY: !!process.env.SUPABASE_SERVICE_ROLE_KEY
+    },
+    supabaseInitialized: !!supabase && !!supabaseAdmin
   });
 });
 
@@ -90,7 +91,11 @@ app.post('/api/auth/signup', asyncHandler(async (req, res) => {
   console.log('[SIGNUP] Step 1: request received for', email);
 
   if (!supabase || !supabaseAdmin) {
-    return res.status(500).json({ success: false, error: 'Server misconfigured: Supabase clients missing.' });
+    const missing = [];
+    if (!process.env.SUPABASE_URL) missing.push('SUPABASE_URL');
+    if (!process.env.SUPABASE_ANON_KEY) missing.push('SUPABASE_ANON_KEY');
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) missing.push('SUPABASE_SERVICE_ROLE_KEY');
+    throw new Error(`Supabase client initialization failed in lib/supabase.js.\nMissing environment variables: ${missing.join(', ')}.\ncreateClient() was bypassed because variables were undefined.`);
   }
 
   console.log('[SIGNUP] Step 2: calling supabase.auth.signUp');
@@ -140,7 +145,10 @@ app.post('/api/auth/login', asyncHandler(async (req, res) => {
   console.log('[LOGIN] Step 1: request received for', email);
 
   if (!supabase) {
-    return res.status(500).json({ success: false, error: 'Server misconfigured: Supabase anon client not initialized.' });
+    const missing = [];
+    if (!process.env.SUPABASE_URL) missing.push('SUPABASE_URL');
+    if (!process.env.SUPABASE_ANON_KEY) missing.push('SUPABASE_ANON_KEY');
+    throw new Error(`Supabase anon client initialization failed in lib/supabase.js line 9.\nMissing environment variables: ${missing.join(', ')}.\ncreateClient(supabaseUrl, supabaseAnonKey) was not called.`);
   }
 
   console.log('[LOGIN] Step 2: calling supabase.auth.signInWithPassword');
