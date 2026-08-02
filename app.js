@@ -16,22 +16,40 @@ document.addEventListener('DOMContentLoaded', () => { console.log('DOMContentLoa
 const api = {
   get: async (path) => { 
     try { 
+      console.log(`[FETCH GET] ${path}`);
       const res = await fetch(path);
+      const text = await res.text();
       if (!res.ok) {
-        const text = await res.text();
         throw new Error(path + " failed: " + text);
       }
-      return await res.json(); 
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        return JSON.parse(text);
+      } else {
+        console.error(`[FETCH GET] Non-JSON response from ${path}`);
+        console.error(`Status: ${res.status}`);
+        console.error(`Body: ${text}`);
+        return {};
+      }
     } catch(e) { console.error('fetch failed', e); return {}; } 
   },
   post: async (path, body) => { 
     try { 
+      console.log(`[FETCH POST] ${path}`);
       const res = await fetch(path, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
+      const text = await res.text();
       if (!res.ok) {
-        const text = await res.text();
         throw new Error(path + " failed: " + text);
       }
-      return await res.json(); 
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        return JSON.parse(text);
+      } else {
+        console.error(`[FETCH POST] Non-JSON response from ${path}`);
+        console.error(`Status: ${res.status}`);
+        console.error(`Body: ${text}`);
+        return {};
+      }
     } catch(e) { console.error('fetch failed', e); return {}; } 
   }
 };
@@ -214,24 +232,32 @@ const actions = {
     }
 
     try {
-      let res;
-      if (isRegister) {
-        console.log('[AUTH] Step 2: calling /api/auth/signup');
-        res = await fetch('/api/auth/signup', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, email, password, github_username: username })
-        });
+      let url = isRegister ? '/api/auth/signup' : '/api/auth/login';
+      let bodyData = isRegister ? { name, email, password, github_username: username } : { email, password };
+      
+      console.log(`[AUTH] Step 2: calling ${url}`);
+      let res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bodyData)
+      });
+      
+      const text = await res.text();
+      const contentType = res.headers.get('content-type') || '';
+      let data = {};
+      
+      if (contentType.includes('application/json')) {
+        data = JSON.parse(text);
       } else {
-        console.log('[AUTH] Step 2: calling /api/auth/login');
-        res = await fetch('/api/auth/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password })
-        });
+        console.error(`[AUTH] Non-JSON response from ${url}`);
+        console.error(`Status: ${res.status}`);
+        console.error(`Body: ${text}`);
+        alert('Server returned HTML instead of JSON. See console for details.');
+        submitBtn.disabled = false;
+        submitBtn.innerText = isRegister ? 'Create Account' : 'Login';
+        return;
       }
 
-      const data = await res.json();
       console.log('[AUTH] Step 3: server response:', data);
 
       if (!res.ok || !data.success) {
@@ -1408,10 +1434,19 @@ const views = {
       const script = document.createElement('script');
       script.innerHTML = `
         window.loadRecentFixes = async () => {
+          console.log('[FETCH GET] /api/ai/fix/recent');
           const res = await fetch('/api/ai/fix/recent');
-          const data = await res.json();
-          alert('Loaded ' + data.length + ' recent fixes. (Check console for raw data)');
-          console.log(data);
+          const text = await res.text();
+          const contentType = res.headers.get('content-type') || '';
+          if (contentType.includes('application/json')) {
+            const data = JSON.parse(text);
+            alert('Loaded ' + data.length + ' recent fixes. (Check console for raw data)');
+            console.log(data);
+          } else {
+            console.error('[FETCH GET] Non-JSON response from /api/ai/fix/recent');
+            console.error('Status:', res.status);
+            console.error('Body:', text);
+          }
         };
         
         window.generateAIFix = async (issueId, mode, model, apiKey) => {
@@ -1421,6 +1456,7 @@ const views = {
           
           if (mode === 'local') {
             try {
+              console.log('[FETCH GET] /api/ollama/ping');
               const pingRes = await fetch('/api/ollama/ping');
               if (!pingRes.ok) throw new Error();
             } catch (e) {
@@ -1456,13 +1492,16 @@ const views = {
             
             clearInterval(intv);
             
-            let data;
+            const text = await res.text();
             const contentType = res.headers.get('content-type') || '';
+            let data;
+            
             if (contentType.includes('application/json')) {
-              data = await res.json();
+              data = JSON.parse(text);
             } else {
-              const text = await res.text();
-              console.error("[AI Fix Assistant] Non-JSON response:", text);
+              console.error("[AI Fix Assistant] Non-JSON response from /api/ai/fix");
+              console.error("Status:", res.status);
+              console.error("Body:", text);
               throw new Error(\`Server returned an invalid response (Status: \${res.status}). Please restart your Node server.\`);
             }
             
