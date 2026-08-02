@@ -2,6 +2,7 @@
 // ║                LaunchGuard AI – server.js                  ║
 // ║  All imports fixed. Playwright lazy-loaded. JSON-safe.     ║
 // ╚══════════════════════════════════════════════════════════════╝
+console.log("SERVER STARTED");
 import express from 'express';
 import cors from 'cors';
 import fs from 'fs';
