@@ -1,4 +1,5 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+console.log("LaunchGuard boot started");
 
 window.onerror = function(msg, url, line, col, err) {
   console.error('Global window error:', msg, err);
@@ -1695,6 +1696,7 @@ const bindEvents = () => {
 };
 
 window.onhashchange = router;
+console.log("Rendering application");
 router();
 
 } catch (err) {
