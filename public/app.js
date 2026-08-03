@@ -103,7 +103,7 @@ const navItems = [
   ['share','↗','Public share']
 ];
 
-const wfOrder = ['report', 'replay', 'shader', 'eval', 'issue', 'fix', 'aifix', 'share'];
+const wfOrder = ['replay', 'shader', 'eval', 'issue', 'fix', 'aifix', 'report', 'share'];
 
 // Components
 const components = {
@@ -122,12 +122,13 @@ const components = {
   },
   progressTracker: (activeKey) => {
     const steps = [
-      { key: 'report', label: 'Scan Complete' },
       { key: 'replay', label: 'Broken Flows' },
       { key: 'shader', label: 'Journey Map' },
+      { key: 'eval', label: 'Eval Builder' },
       { key: 'issue', label: 'Issues' },
       { key: 'fix', label: 'AI Fix Plan' },
-      { key: 'aifix', label: 'AI Fix Assistant' }
+      { key: 'aifix', label: 'AI Fix Assistant' },
+      { key: 'report', label: 'Overview' }
     ];
     const activeIdx = steps.findIndex(s => s.key === activeKey);
     if (activeIdx < 0) return '';
@@ -795,7 +796,7 @@ const views = {
       
       if (st.progress >= 100 && !st.is_warn) {
         if (window.pollingInterval) clearInterval(window.pollingInterval);
-        setTimeout(() => location.hash = 'report', 1500);
+        setTimeout(() => location.hash = 'replay', 1500);
       }
     };
 
