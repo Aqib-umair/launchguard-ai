@@ -88,18 +88,24 @@ app.get('/api/dashboard', asyncHandler(async (req, res) => {
   if (!supabase) return res.json({ hasScan: false });
   const { data: latestScan } = await supabase.from('scans').select('*').order('created_at', { ascending: false }).limit(1).single();
   if (!latestScan) return res.json({ hasScan: false });
-  const { data: vulnerabilities }      = await supabase.from('vulnerabilities').select('*').eq('scan_id', latestScan.id);
+  const { data: vulnerabilities } = await supabase.from('vulnerabilities').select('*').eq('scan_id', latestScan.id);
   const { data: brokenFlows } = await supabase.from('broken_flows').select('*').eq('scan_id', latestScan.id);
+  const { data: journeyNodes } = await supabase.from('journey_nodes').select('*').eq('scan_id', latestScan.id);
+  const { data: networkLogs } = await supabase.from('network_logs').select('*').eq('scan_id', latestScan.id);
+  
   res.json({
     hasScan: true,
-    score: latestScan.score,
+    score: latestScan.score || 0,
     brokenFlows: brokenFlows ? brokenFlows.length : 0,
-    apiFailures: latestScan.api_failures,
+    apiFailures: latestScan.api_failures || 0,
     performance: latestScan.performance || 98,
     a11y: 0, security: 0,
     fixes: vulnerabilities ? vulnerabilities.length : 0,
-    consoleErrs: latestScan.api_failures,
-    networkErrs: latestScan.api_failures,
+    bugsFound: vulnerabilities ? vulnerabilities.length : 0,
+    pagesScanned: journeyNodes ? journeyNodes.length : 0,
+    apiCallsChecked: networkLogs ? networkLogs.length : 0,
+    consoleErrs: latestScan.api_failures || 0,
+    networkErrs: latestScan.api_failures || 0,
     latestScanName:   latestScan.name,
     latestScanStatus: latestScan.status,
   });
@@ -204,11 +210,12 @@ app.get('/api/broken_flows', asyncHandler(async (req, res) => {
 
 // ── Journeys ──────────────────────────────────────────────────
 app.get('/api/journeys', asyncHandler(async (req, res) => {
-  if (!supabase) return res.json([]);
+  if (!supabase) return res.json({ nodes: [], edges: [] });
   const sid = req.query.scanId || await getLatestScanId();
-  if (!sid) return res.json([]);
+  if (!sid) return res.json({ nodes: [], edges: [] });
   const { data: nodes } = await supabase.from('journey_nodes').select('*').eq('scan_id', sid);
-  res.json(nodes || []);
+  const { data: edges } = await supabase.from('journey_edges').select('*').eq('scan_id', sid);
+  res.json({ nodes: nodes || [], edges: edges || [] });
 }));
 
 // ── Evals ─────────────────────────────────────────────────────

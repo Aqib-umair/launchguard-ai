@@ -83,7 +83,7 @@ if (!app) {
 const navItems = [
   ['report','▦','Overview'],
   ['setup','＋','New scan'],
-  ['progress','◉','Live scans'],
+  ['live-scan','◉','Live scans'],
   ['replay','↝','Broken flows'],
   ['shader','✦','Journey Map'],
   ['eval','⌁','Eval builder'],
@@ -265,7 +265,7 @@ const actions = {
     store.set('activeScanId', res.id);
     store.setJSON('activeScanData', { name, repoUrl, deployUrl });
     store.set('hasScanned', 'true');
-    location.hash = 'progress';
+    location.hash = 'live-scan?id=' + res.id;
   },
   previewRepo: async (e) => {
     const url = e.target.value.trim();
@@ -646,23 +646,23 @@ const views = {
     
     const hasScanned = store.get('hasScanned') === 'true';
     
-    let score = 0, brokenFlows = 0, apiFailures = 0, performance = 0;
+    let score = 0, bugsFound = 0, pagesScanned = 0, apiCallsChecked = 0;
     let scanName = 'No scans run yet', scanStatus = 'Awaiting Input';
     
     if (hasScanned && data.hasScan) {
       score = data.score;
-      brokenFlows = data.brokenFlows;
-      apiFailures = data.apiFailures;
-      performance = data.performance || 98;
+      bugsFound = data.bugsFound || 0;
+      pagesScanned = data.pagesScanned || 0;
+      apiCallsChecked = data.apiCallsChecked || 0;
       scanName = data.latestScanName || 'System Scan';
       scanStatus = data.latestScanStatus || 'Completed';
     }
 
     const stats = [
-      ['Reliability Score', score, score === 0 ? 'tag muted' : 'tag lime', score === 0 ? '--' : 'GOOD'],
-      ['Broken Flows', brokenFlows, brokenFlows === 0 ? 'tag muted' : 'tag danger', brokenFlows === 0 ? '--' : 'NEEDS ATTENTION'],
-      ['API Failures', apiFailures, apiFailures === 0 ? 'tag muted' : 'tag warn', apiFailures === 0 ? '--' : 'WARNING'],
-      ['Performance Score', performance, performance === 0 ? 'tag muted' : 'tag lime', performance === 0 ? '--' : 'FAST']
+      ['Risk Score', score, score === 0 ? 'tag muted' : (score > 80 ? 'tag lime' : (score > 50 ? 'tag warn' : 'tag danger')), score === 0 ? '--' : (score > 80 ? 'SECURE' : 'HIGH RISK')],
+      ['Bugs Found', bugsFound, bugsFound === 0 ? 'tag muted' : 'tag danger', bugsFound === 0 ? '--' : 'NEEDS FIX'],
+      ['Pages Scanned', pagesScanned, pagesScanned === 0 ? 'tag muted' : 'tag lime', pagesScanned === 0 ? '--' : 'SCANNED'],
+      ['API Calls Checked', apiCallsChecked, apiCallsChecked === 0 ? 'tag muted' : 'tag lime', apiCallsChecked === 0 ? '--' : 'VERIFIED']
     ];
     
     body += `<div class="grid cols4" style="margin-bottom:32px;">
@@ -737,13 +737,17 @@ const views = {
     bindEvents();
   },
   
-  progress: async () => {
-    const scanId = store.get('activeScanId');
+  'live-scan': async () => {
+    const fullHash = location.hash.slice(1);
+    const query = new URLSearchParams(fullHash.split('?')[1] || '');
+    const queryId = query.get('id');
+    
+    const scanId = queryId || store.get('activeScanId');
     const scanData = store.getJSON('activeScanData') || { name: scanId, repoUrl: '' };
     if (!scanId) return location.hash = 'setup';
     
     let body = components.head('Live execution', 'Scan Command Center', 'Watch autonomous agents navigate and test your application in real-time.', '<span class="tag lime pulse-anim">● AGENT ACTIVE</span>');
-    body += components.progressTracker('progress');
+    body += components.progressTracker('live-scan');
     body += `
     <div class="grid" style="grid-template-columns: 320px 1fr; gap: 24px; align-items: flex-start;">
       <div class="queue-list">
@@ -760,7 +764,7 @@ const views = {
       </div>
     </div>`;
     
-    app.innerHTML = components.shell('Live scans', 'progress', body);
+    app.innerHTML = components.shell('Live scans', 'live-scan', body);
     bindEvents();
     
     
@@ -813,16 +817,18 @@ const views = {
     let timeline = `<div style="text-align:center; color:var(--muted); padding:30px;">No data</div>`;
     
     if(active) {
-      timeline = `<div class="timeline">
+      timeline = \`<div class="timeline">
         <div class="t-node ok"><i>✓</i><div class="t-content"><b>Crawler Initiated</b><small>Playwright context created</small></div></div>
         <div class="t-node err active"><i>!</i>
           <div class="t-content">
-            <b style="color:var(--red)">Runtime Failure</b><small style="color:var(--red)">AI caught an issue at ${active.fail_step}</small>
-            ${active.screenshot ? `<div class="screenshot" style="margin-top:16px;"><img src="${active.screenshot}" style="width:100%; border-radius:4px; border:1px solid var(--red);"></div>` : ''}
-            ${active.console_error ? `<div style="margin-top:12px; background:#1a0505; color:#ff8e8e; padding:10px; font-family:'DM Mono'; font-size:11px; border-radius:4px;">Console: ${active.console_error}</div>` : ''}
+            <b style="color:var(--red)">Runtime Failure</b><small style="color:var(--red)">AI caught an issue at \${active.fail_step}</small>
+            <div style="margin-top: 8px; color: var(--muted); font-size: 12px;">Confidence: \${active.confidence}% | Severity: \${active.severity} | Affected URL: \${active.name || 'Unknown'}</div>
+            \${active.screenshot_url ? \`<div class="screenshot" style="margin-top:16px;"><img src="\${active.screenshot_url}" style="width:100%; border-radius:4px; border:1px solid var(--red);"></div>\` : ''}
+            \${active.console_error ? \`<div style="margin-top:12px; background:#1a0505; color:#ff8e8e; padding:10px; font-family:'DM Mono'; font-size:11px; border-radius:4px;">Console Error: \${active.console_error}</div>\` : ''}
+            \${active.network_error ? \`<div style="margin-top:12px; background:#1a0505; color:#ff8e8e; padding:10px; font-family:'DM Mono'; font-size:11px; border-radius:4px;">Network Error: \${active.network_error}</div>\` : ''}
           </div>
         </div>
-      </div>`;
+      </div>\`;
     }
 
     let body = components.head('Broken flows', 'Journey Map Explorer', 'Review synthetic user sessions that ended in failure.');
@@ -839,7 +845,7 @@ const views = {
   shader: async () => {
     const scanId = store.get('activeScanId');
     if (!scanId) return location.hash = 'setup';
-    const nodes = await api.get(`/api/journeys?scanId=${scanId}`);
+    const { nodes, edges } = await api.get(`/api/journeys?scanId=${scanId}`);
     let body = components.head('Flow intelligence', 'AI Website Journey Map', 'Interactive visual map of crawled routes, node health, and page-level telemetry.');
     body += components.progressTracker('shader');
     
@@ -922,44 +928,32 @@ const views = {
         </div>
       `;
 
-      // 2. Build Interactive Journey
-      let journeyHtml = '<div class="journey-track">';
-      
-      window.shaderNodesData = {};
-      
+      // 2. Build Interactive Journey with Mermaid
+      let mermaidGraph = 'graph TD\\n';
+      const nodeIds = {};
       nodes.forEach((n, i) => {
-        window.shaderNodesData[n.id] = n;
-        
-        const animDelay = (i * 0.4) + 's';
-        const connDelay = (i * 0.4 + 0.3) + 's';
-        
-        let statusText = '';
-        let statusColor = '';
-        if(n.status === 'green') { statusText = '● Healthy'; statusColor = 'var(--lime)'; }
-        else if(n.status === 'yellow') { statusText = '● Warning'; statusColor = 'var(--orange)'; }
-        else { statusText = '● Critical Issue'; statusColor = 'var(--red)'; }
-
-        // Node card
-        journeyHtml += `
-          <div class="j-node ${n.status}" style="animation-delay: ${animDelay};" onclick="window.openSidePanel('${n.id}')">
-            ${n.screenshot ? `<img src="${n.screenshot}" class="j-node-img">` : `<div class="j-node-img" style="display:grid;place-items:center;color:#333;">No Image</div>`}
-            <div class="j-node-info">
-              <div class="j-node-title">${n.path === '/' ? '/ (Home)' : n.path}</div>
-              <div class="j-node-status" style="color: ${statusColor};">${statusText}</div>
-            </div>
-          </div>
-        `;
-        
-        if (i < nodes.length - 1) {
-          journeyHtml += `<div class="j-conn" style="animation-delay: ${connDelay};"></div>`;
+        const id = 'node' + i;
+        nodeIds[n.path] = id;
+        const status = n.status === 'red' ? 'fill:#3a1015,stroke:#ff4d4d,stroke-width:2px' :
+                       (n.status === 'yellow' ? 'fill:#2a1f10,stroke:#ffb84d,stroke-width:2px' :
+                       'fill:#102a15,stroke:#4dff4d,stroke-width:2px');
+        const pathLabel = n.path === '/' ? '/ (Home)' : n.path;
+        mermaidGraph += '  ' + id + '["' + pathLabel + '"]\\n';
+        mermaidGraph += '  style ' + id + ' ' + status + '\\n';
+      });
+      edges.forEach((e) => {
+        const sourceId = nodeIds[e.source_path];
+        const targetId = nodeIds[e.target_path];
+        if (sourceId && targetId) {
+          mermaidGraph += '  ' + sourceId + ' --> ' + targetId + '\\n';
         }
       });
-      
-      journeyHtml += '</div>';
 
       body += `
-        <div class="journey-container">
-           ${journeyHtml}
+        <div class="journey-container" style="justify-content: center; align-items: flex-start; padding: 40px;">
+           <div class="mermaid" style="background: transparent;">
+             ${mermaidGraph}
+           </div>
         </div>
         <div style="font-family:'DM Mono'; font-size:11px; background:rgba(255,255,255,0.02); padding:16px; border-radius:8px; border:1px solid var(--line); display:flex; gap:24px;">
            <b style="color:#fff; margin-right:12px;">LEGEND</b>
@@ -1076,8 +1070,13 @@ const views = {
       }
     }
     body += components.wfNav('shader');
-    app.innerHTML = components.shell('AI Website Journey Map', 'shader', body);
+    app.innerHTML = components.shell('Journey Map', 'shader', body);
     bindEvents();
+    setTimeout(() => {
+        if (window.mermaid) {
+            window.mermaid.init(undefined, document.querySelectorAll('.mermaid'));
+        }
+    }, 100);
   },
 
   eval: async () => {
@@ -1122,27 +1121,29 @@ const views = {
       issuesContent = `<div style="display:grid; gap:24px;">` + issues.map(i => `
         <div class="card" style="border-left: 3px solid var(--red);">
           <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
-            <div style="font-family:'DM Mono', monospace; color:var(--muted); font-size:12px;">${i.id}</div>
-            <div class="tag danger">${i.severity}</div>
+            <div style="font-family:'DM Mono', monospace; color:var(--muted); font-size:12px;">\${i.id}</div>
+            <div class="tag danger">\${i.severity}</div>
           </div>
-          <h3 style="margin-bottom:8px; color:#fff;">${i.title}</h3>
-          <p style="color:var(--muted); font-size:14px; margin-bottom:16px; line-height:1.5;">${i.root_cause ? i.root_cause.substring(0, 80) + '...' : 'Issue requires further investigation.'}</p>
+          <h3 style="margin-bottom:8px; color:#fff;">\${i.title}</h3>
           
-          <div style="display:flex; gap:32px; margin-bottom:24px; font-size:12px;">
-            <div>
-              <div style="color:var(--muted); margin-bottom:4px;">Affected Users</div>
-              <div style="color:#fff; font-weight:bold; font-size:16px;">${Math.floor(Math.random()*40 + 10)}%</div>
-            </div>
-            <div>
-              <div style="color:var(--muted); margin-bottom:4px;">Detected</div>
-              <div style="color:#fff; font-weight:bold; font-size:16px;">${Math.floor(Math.random()*10 + 1)} minutes ago</div>
-            </div>
+          <div style="margin-bottom:16px; border:1px solid var(--line); border-radius:6px; padding:12px; font-family:'DM Mono'; font-size:11px; color:var(--muted); line-height: 1.6;">
+             <div><b>Root Cause:</b> <span style="color:#fff;">\${i.root_cause || 'N/A'}</span></div>
+             <div style="margin-top:6px;"><b>Affected File:</b> <span style="color:#fff;">\${i.affected_file || 'N/A'}</span></div>
+             <div style="margin-top:6px;"><b>Affected URL:</b> <span style="color:#fff;">\${i.affected_url || 'N/A'}</span></div>
+             <div style="margin-top:6px;"><b>Recommendation:</b> <span style="color:var(--lime);">\${i.recommendation || 'N/A'}</span></div>
           </div>
+          
+          \${i.console_error || i.stack_trace ? \`
+            <div style="background:rgba(255,109,117,0.05); border:1px solid rgba(255,109,117,0.2); border-radius:6px; padding:12px; font-family:'DM Mono'; font-size:11px; color:var(--red); margin-bottom:16px; overflow-x:auto;">
+               \${i.console_error ? \`<div><b>Console Error:</b> \${i.console_error}</div>\` : ''}
+               \${i.stack_trace ? \`<div style="margin-top:8px; white-space:pre-wrap;"><b>Stack Trace:</b>\\n\${i.stack_trace}</div>\` : ''}
+            </div>
+          \` : ''}
           
           <div style="display:flex; align-items:center; gap:12px; border-top:1px solid var(--line); padding-top:16px;">
-            <button class="btn ghost" onclick="location.hash='fix?id=${i.id}'">View Details</button>
+            <button class="btn ghost" onclick="location.hash='fix?id=\${i.id}'">View Details</button>
             <button class="btn ghost" data-go="replay">Replay Journey</button>
-            <button class="btn primary" style="margin-left:auto;" onclick="location.hash='aifix?id=${i.id}'">Generate AI Fix ✨</button>
+            <button class="btn primary" style="margin-left:auto;" onclick="location.hash='aifix?id=\${i.id}'">Generate AI Fix ✨</button>
           </div>
         </div>
       `).join('') + `</div>`;
