@@ -151,41 +151,46 @@ app.post('/api/auth/signup', asyncHandler(async (req, res) => {
 
 // ── Login ─────────────────────────────────────────────────────
 app.post('/api/auth/login', asyncHandler(async (req, res) => {
-  const { email, password } = req.body;
-  
-  console.log(`[AUTH] Login attempt for email: ${email}`);
-
-  if (!supabase) {
-    console.error('[AUTH] Supabase not initialized');
-    return res.status(500).json({ success: false, error: 'Supabase not initialized' });
-  }
-
   try {
+    console.log("LOGIN INPUT", req.body);
+    const { email, password } = req.body;
+
+    if (!supabase) {
+      console.error('[AUTH] Supabase not initialized');
+      return res.status(500).json({ success: false, error: 'Supabase not initialized' });
+    }
+
+    console.log("QUERY START");
     const { data: user, error: dbError } = await supabase
       .from('users')
       .select('id, name, username, email, created_at')
       .eq('email', email)
       .eq('password', password)
       .maybeSingle();
+    console.log("QUERY RESULT", user);
+    console.log("QUERY ERROR", dbError);
 
     if (dbError) {
-      console.error('[AUTH] DB Query Error:', dbError);
       return res.status(500).json({ success: false, error: dbError.message });
     }
 
     if (!user) {
-      console.log('[AUTH] Invalid email or password');
       return res.status(401).json({ success: false, error: 'Invalid email or password' });
     }
 
-    console.log(`[AUTH] Login successful for: ${email}`);
     res.json({
       success: true,
       user: user
     });
   } catch (err) {
-    console.error('[AUTH] Unexpected Login Error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    console.error("LOGIN ERROR");
+    console.error(err);
+    console.error(err.stack);
+    return res.status(500).json({
+      success: false,
+      error: err.message,
+      stack: err.stack
+    });
   }
 }));
 
