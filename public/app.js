@@ -1650,7 +1650,7 @@ const router = async () => {
   
   const isLoggedIn = localStorage.getItem('loggedIn') === 'true';
   
-  if (!isLoggedIn && !['landing', 'login', 'register'].includes(viewName)) {
+  if (!isLoggedIn && !['landing', 'login', 'register', ''].includes(viewName)) {
     location.hash = 'landing';
     return;
   }
@@ -1682,9 +1682,17 @@ const bindEvents = () => {
   });
 };
 
+const startApp = () => {
+  console.log("Rendering application");
+  router();
+};
+
 window.onhashchange = router;
-console.log("Rendering application");
-router();
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', startApp);
+} else {
+  startApp();
+}
 
 } catch (err) {
   console.error(err);
