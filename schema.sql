@@ -3,20 +3,10 @@
 -- Enable UUID extension if not already enabled
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- 1. Users
-CREATE TABLE IF NOT EXISTS users (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name TEXT NOT NULL,
-    username TEXT,
-    email TEXT UNIQUE NOT NULL,
-    password TEXT NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- 2. Repositories
+-- 1. Repositories
 CREATE TABLE IF NOT EXISTS repositories (
     id TEXT PRIMARY KEY, -- Can be github owner/repo
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    user_email TEXT, -- Replaces user_id since no auth
     name TEXT NOT NULL,
     owner TEXT,
     url TEXT NOT NULL,
@@ -32,7 +22,7 @@ CREATE TABLE IF NOT EXISTS repositories (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 3. Repository Analysis
+-- 2. Repository Analysis
 CREATE TABLE IF NOT EXISTS repository_analysis (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     repository_id TEXT REFERENCES repositories(id) ON DELETE CASCADE,
@@ -42,7 +32,7 @@ CREATE TABLE IF NOT EXISTS repository_analysis (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 4. Scans
+-- 3. Scans
 CREATE TABLE IF NOT EXISTS scans (
     id TEXT PRIMARY KEY,
     repository_id TEXT REFERENCES repositories(id) ON DELETE CASCADE,
@@ -56,15 +46,15 @@ CREATE TABLE IF NOT EXISTS scans (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 5. Journeys
-CREATE TABLE IF NOT EXISTS journeys (
+-- 4. Journey Maps (was journeys)
+CREATE TABLE IF NOT EXISTS journey_maps (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     scan_id TEXT REFERENCES scans(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 6. Journey Nodes
+-- 5. Journey Nodes
 CREATE TABLE IF NOT EXISTS journey_nodes (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     scan_id TEXT REFERENCES scans(id) ON DELETE CASCADE,
@@ -79,7 +69,7 @@ CREATE TABLE IF NOT EXISTS journey_nodes (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 7. Journey Edges
+-- 6. Journey Edges
 CREATE TABLE IF NOT EXISTS journey_edges (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     scan_id TEXT REFERENCES scans(id) ON DELETE CASCADE,
@@ -88,7 +78,7 @@ CREATE TABLE IF NOT EXISTS journey_edges (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 8. Broken Flows
+-- 7. Broken Flows
 CREATE TABLE IF NOT EXISTS broken_flows (
     id TEXT PRIMARY KEY,
     scan_id TEXT REFERENCES scans(id) ON DELETE CASCADE,
@@ -105,7 +95,7 @@ CREATE TABLE IF NOT EXISTS broken_flows (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 9. Evals
+-- 8. Evals
 CREATE TABLE IF NOT EXISTS evals (
     id TEXT PRIMARY KEY,
     scan_id TEXT REFERENCES scans(id) ON DELETE CASCADE,
@@ -119,8 +109,8 @@ CREATE TABLE IF NOT EXISTS evals (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 10. Issues
-CREATE TABLE IF NOT EXISTS issues (
+-- 9. Vulnerabilities (was issues)
+CREATE TABLE IF NOT EXISTS vulnerabilities (
     id TEXT PRIMARY KEY, -- BUG-LG-YYYY-XXXX
     scan_id TEXT REFERENCES scans(id) ON DELETE CASCADE,
     title TEXT NOT NULL,
@@ -144,15 +134,15 @@ CREATE TABLE IF NOT EXISTS issues (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 11. Stack Traces
+-- 10. Stack Traces
 CREATE TABLE IF NOT EXISTS stack_traces (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    issue_id TEXT REFERENCES issues(id) ON DELETE CASCADE,
+    vulnerability_id TEXT REFERENCES vulnerabilities(id) ON DELETE CASCADE,
     trace TEXT NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 12. Console Logs
+-- 11. Console Logs
 CREATE TABLE IF NOT EXISTS console_logs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     scan_id TEXT REFERENCES scans(id) ON DELETE CASCADE,
@@ -162,7 +152,7 @@ CREATE TABLE IF NOT EXISTS console_logs (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 13. Network Logs
+-- 12. Network Logs
 CREATE TABLE IF NOT EXISTS network_logs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     scan_id TEXT REFERENCES scans(id) ON DELETE CASCADE,
@@ -174,7 +164,7 @@ CREATE TABLE IF NOT EXISTS network_logs (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 14. Screenshots
+-- 13. Screenshots
 CREATE TABLE IF NOT EXISTS screenshots (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     scan_id TEXT REFERENCES scans(id) ON DELETE CASCADE,
@@ -183,10 +173,10 @@ CREATE TABLE IF NOT EXISTS screenshots (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 15. AI Fix Plans
+-- 14. AI Fix Plans
 CREATE TABLE IF NOT EXISTS ai_fix_plans (
     id TEXT PRIMARY KEY,
-    issue_id TEXT REFERENCES issues(id) ON DELETE CASCADE,
+    vulnerability_id TEXT REFERENCES vulnerabilities(id) ON DELETE CASCADE,
     problem_analysis TEXT,
     engineering_solution TEXT,
     developer_prompt TEXT,
@@ -195,7 +185,7 @@ CREATE TABLE IF NOT EXISTS ai_fix_plans (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 16. AI Reports
+-- 15. AI Reports
 CREATE TABLE IF NOT EXISTS ai_reports (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     scan_id TEXT REFERENCES scans(id) ON DELETE CASCADE,
@@ -203,10 +193,36 @@ CREATE TABLE IF NOT EXISTS ai_reports (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 17. Engineering Prompts
+-- 16. Engineering Prompts
 CREATE TABLE IF NOT EXISTS engineering_prompts (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     scan_id TEXT REFERENCES scans(id) ON DELETE CASCADE,
     content TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 17. Reports (NEW)
+CREATE TABLE IF NOT EXISTS reports (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    scan_id TEXT REFERENCES scans(id) ON DELETE CASCADE,
+    report_data JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 18. Dashboard History (NEW)
+CREATE TABLE IF NOT EXISTS dashboard_history (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_email TEXT,
+    snapshot_data JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 19. Scan Logs
+CREATE TABLE IF NOT EXISTS scan_logs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    scan_id TEXT REFERENCES scans(id) ON DELETE CASCADE,
+    message TEXT NOT NULL,
+    progress INTEGER DEFAULT 0,
+    is_warn BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

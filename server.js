@@ -15,14 +15,18 @@ import { supabase, supabaseAdmin } from './lib/supabase.js';
 dotenv.config();
 
 // ── Startup env audit ──────────────────────────────────────────
-if (!process.env.SUPABASE_URL) console.error('SUPABASE_URL is missing.');
-else console.log('SUPABASE_URL exists.');
-
-if (!process.env.SUPABASE_ANON_KEY) console.error('SUPABASE_ANON_KEY is missing.');
-else console.log('SUPABASE_ANON_KEY exists.');
-
-if (!process.env.SUPABASE_SERVICE_ROLE_KEY) console.error('SUPABASE_SERVICE_ROLE_KEY is missing.');
-else console.log('SUPABASE_SERVICE_ROLE_KEY exists.');
+const requiredEnv = ['SUPABASE_URL', 'SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY'];
+let missingEnv = [];
+for (const envVar of requiredEnv) {
+  if (!process.env[envVar]) {
+    console.error(`Missing environment variable: ${envVar}`);
+    missingEnv.push(envVar);
+  }
+}
+if (missingEnv.length > 0) {
+  console.error("Halting startup due to missing environment variables.");
+  process.exit(1);
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -58,17 +62,22 @@ async function getLatestScanId() {
 // ══════════════════════════════════════════════════════════════
 
 // ── Health check ───────────────────────────────────────────────
-app.get('/api/health', (req, res) => {
-  res.json({
-    server: "running",
-    env: {
-      SUPABASE_URL: !!process.env.SUPABASE_URL,
-      SUPABASE_ANON_KEY: !!process.env.SUPABASE_ANON_KEY,
-      SUPABASE_SERVICE_ROLE_KEY: !!process.env.SUPABASE_SERVICE_ROLE_KEY
-    },
-    supabaseInitialized: !!supabase && !!supabaseAdmin
-  });
-});
+app.get('/api/health', asyncHandler(async (req, res) => {
+  if (!supabaseAdmin) {
+    return res.json({ success: false, database: "disconnected", error: "Supabase client not initialized" });
+  }
+  
+  try {
+    // Basic test to see if DB is reachable
+    const { data, error } = await supabaseAdmin.from('scans').select('id').limit(1);
+    if (error) {
+      return res.json({ success: false, database: "disconnected", error: error.message });
+    }
+    return res.json({ success: true, database: "connected" });
+  } catch (err) {
+    return res.json({ success: false, database: "disconnected", error: err.message });
+  }
+}));
 
 
 
@@ -79,7 +88,7 @@ app.get('/api/dashboard', asyncHandler(async (req, res) => {
   if (!supabase) return res.json({ hasScan: false });
   const { data: latestScan } = await supabase.from('scans').select('*').order('created_at', { ascending: false }).limit(1).single();
   if (!latestScan) return res.json({ hasScan: false });
-  const { data: issues }      = await supabase.from('issues').select('*').eq('scan_id', latestScan.id);
+  const { data: vulnerabilities }      = await supabase.from('vulnerabilities').select('*').eq('scan_id', latestScan.id);
   const { data: brokenFlows } = await supabase.from('broken_flows').select('*').eq('scan_id', latestScan.id);
   res.json({
     hasScan: true,
@@ -88,7 +97,7 @@ app.get('/api/dashboard', asyncHandler(async (req, res) => {
     apiFailures: latestScan.api_failures,
     performance: latestScan.performance || 98,
     a11y: 0, security: 0,
-    fixes: issues ? issues.length : 0,
+    fixes: vulnerabilities ? vulnerabilities.length : 0,
     consoleErrs: latestScan.api_failures,
     networkErrs: latestScan.api_failures,
     latestScanName:   latestScan.name,
@@ -103,11 +112,11 @@ app.get('/api/reports/:scanId', asyncHandler(async (req, res) => {
   const { data: scan }     = await supabase.from('scans').select('*').eq('id', scanId).single();
   if (!scan) return res.status(404).json({ error: 'Scan not found' });
   const { data: repo }     = await supabase.from('repositories').select('*').eq('id', scan.repository_id).single();
-  const { data: issues }   = await supabase.from('issues').select('*').eq('scan_id', scanId);
+  const { data: vulnerabilities }   = await supabase.from('vulnerabilities').select('*').eq('scan_id', scanId);
   const { data: flows }    = await supabase.from('broken_flows').select('*').eq('scan_id', scanId);
   const { data: evals }    = await supabase.from('evals').select('*').eq('scan_id', scanId);
   const { data: aiReport } = await supabase.from('ai_reports').select('*').eq('scan_id', scanId).single();
-  res.json({ scan, repo, issues, flows, evals, aiData: aiReport ? aiReport.summary_json : null });
+  res.json({ scan, repo, issues: vulnerabilities, flows, evals, aiData: aiReport ? aiReport.summary_json : null });
 }));
 
 // ── Repo preview ──────────────────────────────────────────────
@@ -168,18 +177,18 @@ app.get('/api/scans', asyncHandler(async (req, res) => {
   res.json(scans || []);
 }));
 
-// ── Issues ────────────────────────────────────────────────────
+// ── Vulnerabilities ────────────────────────────────────────────────────
 app.get('/api/issues', asyncHandler(async (req, res) => {
   if (!supabase) return res.json([]);
   const sid = req.query.scanId || await getLatestScanId();
   if (!sid) return res.json([]);
-  const { data: issues } = await supabase.from('issues').select('*').eq('scan_id', sid).order('created_at', { ascending: false });
+  const { data: issues } = await supabase.from('vulnerabilities').select('*').eq('scan_id', sid).order('created_at', { ascending: false });
   res.json(issues || []);
 }));
 
 app.get('/api/issues/:id', asyncHandler(async (req, res) => {
   if (!supabase) return res.status(500).json({ error: 'Supabase not initialized.' });
-  const { data: issue } = await supabase.from('issues').select('*').eq('id', req.params.id).single();
+  const { data: issue } = await supabase.from('vulnerabilities').select('*').eq('id', req.params.id).single();
   if (!issue) return res.status(404).json({ error: 'Issue not found' });
   res.json(issue);
 }));
@@ -216,7 +225,7 @@ app.get('/api/ai_fix_plans', asyncHandler(async (req, res) => {
   if (!supabase) return res.json([]);
   const { issueId } = req.query;
   if (!issueId) return res.json([]);
-  const { data: plans } = await supabase.from('ai_fix_plans').select('*').eq('issue_id', issueId);
+  const { data: plans } = await supabase.from('ai_fix_plans').select('*').eq('vulnerability_id', issueId);
   res.json(plans || []);
 }));
 
@@ -244,12 +253,12 @@ app.post('/api/ai/fix', async (req, res) => {
   try {
     if (!supabase) return res.status(500).json({ error: 'Supabase not initialized.' });
 
-    const { data: existingPlans } = await supabase.from('ai_fix_plans').select('*').eq('issue_id', issueId);
+    const { data: existingPlans } = await supabase.from('ai_fix_plans').select('*').eq('vulnerability_id', issueId);
     if (existingPlans && existingPlans.length > 0) {
       return res.json(JSON.parse(existingPlans[0].problem_analysis));
     }
 
-    const { data: issue } = await supabase.from('issues').select('*').eq('id', issueId).single();
+    const { data: issue } = await supabase.from('vulnerabilities').select('*').eq('id', issueId).single();
     if (!issue) return res.status(404).json({ error: `Bug ID ${issueId} does not exist.` });
     const { data: scan } = await supabase.from('scans').select('*').eq('id', issue.scan_id).single();
     if (!scan) return res.status(400).json({ error: 'Required scan data was not collected.' });
@@ -309,7 +318,7 @@ Stack Trace: ${issue.stack_trace || 'None'}`;
 
     const fixId = `FIX-${randomUUID().split('-')[0].toUpperCase()}`;
     await supabase.from('ai_fix_plans').insert([{
-      id: fixId, issue_id: issueId,
+      id: fixId, vulnerability_id: issueId,
       problem_analysis:    JSON.stringify(parsedResponse.problem_analysis),
       engineering_solution:JSON.stringify(parsedResponse.engineering_solution),
       developer_prompt:    parsedResponse.developer_prompt,

@@ -790,7 +790,7 @@ const views = {
         
         if (st.progress >= 100) {
           supabaseClient.removeChannel(channel);
-          setTimeout(() => location.hash = 'replay', 1500);
+          setTimeout(() => location.hash = 'report', 1500); // Redirect to overview/report when done
         }
       })
       .subscribe();
