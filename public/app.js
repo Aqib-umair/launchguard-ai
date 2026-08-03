@@ -769,37 +769,74 @@ const views = {
     app.innerHTML = components.shell('Live scans', 'live-scan', body);
     bindEvents();
     
-    
-    if (!supabaseClient) {
-      console.warn("Supabase not initialized for realtime");
-      return;
+    let processedLogIds = new Set();
+    const handleLog = (st) => {
+      if (processedLogIds.has(st.id)) return;
+      if (st.id) processedLogIds.add(st.id);
+      
+      const pb = document.getElementById('prog-bar');
+      if (pb) pb.style.width = st.progress + '%';
+      const pp = document.getElementById('prog-perc');
+      if (pp) pp.innerText = st.progress + '%';
+      
+      const termEl = document.createElement('div');
+      termEl.className = st.is_warn ? 'warn' : (st.message.includes('✓') ? 'ok' : 'cyan');
+      termEl.className += ' anim-slide-in';
+      termEl.style.whiteSpace = 'pre-wrap';
+      termEl.innerText = st.message;
+      const tw = document.getElementById('prog-term');
+      if (tw) {
+        tw.appendChild(termEl);
+        tw.scrollTop = tw.scrollHeight;
+      }
+      
+      if (st.progress >= 100) {
+        if (window.pollingInterval) clearInterval(window.pollingInterval);
+        setTimeout(() => location.hash = 'report', 1500);
+      }
+    };
+
+    let channel = null;
+    if (supabaseClient) {
+      channel = supabaseClient
+        .channel('schema-db-changes')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'scan_logs', filter: `scan_id=eq.${scanId}` }, (payload) => {
+          if (!document.getElementById('prog-bar')) {
+            supabaseClient.removeChannel(channel);
+            if (window.pollingInterval) clearInterval(window.pollingInterval);
+            return;
+          }
+          handleLog(payload.new);
+        })
+        .subscribe();
+    } else {
+      console.warn("Supabase not initialized for realtime, falling back to polling");
     }
-    const channel = supabaseClient
-      .channel('schema-db-changes')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'scan_logs', filter: `scan_id=eq.${scanId}` }, (payload) => {
-        if (!document.getElementById('prog-bar')) return supabaseClient.removeChannel(channel);
-        
-        const st = payload.new;
-        document.getElementById('prog-bar').style.width = st.progress + '%';
-        document.getElementById('prog-perc').innerText = st.progress + '%';
-        
-        const termEl = document.createElement('div');
-        termEl.className = st.is_warn ? 'warn' : (st.message.includes('✓') ? 'ok' : 'cyan');
-        termEl.className += ' anim-slide-in';
-        termEl.style.whiteSpace = 'pre-wrap';
-        termEl.innerText = st.message;
-        const tw = document.getElementById('prog-term');
-        if (tw) {
-          tw.appendChild(termEl);
-          tw.scrollTop = tw.scrollHeight;
+
+    // Polling fallback
+    if (window.pollingInterval) clearInterval(window.pollingInterval);
+    window.pollingInterval = setInterval(async () => {
+      if (!document.getElementById('prog-bar')) {
+        clearInterval(window.pollingInterval);
+        if (channel && supabaseClient) supabaseClient.removeChannel(channel);
+        return;
+      }
+      try {
+        const logs = await api.get(`/api/scan_logs?scanId=${scanId}`);
+        for (const log of logs) {
+          handleLog(log);
         }
-        
-        if (st.progress >= 100) {
-          supabaseClient.removeChannel(channel);
-          setTimeout(() => location.hash = 'report', 1500); // Redirect to overview/report when done
+        const scan = await api.get(`/api/scans/${scanId}`);
+        if (scan && scan.status === 'completed' || scan.status === 'failed') {
+          clearInterval(window.pollingInterval);
+          if (scan.status === 'failed') {
+            handleLog({ id: 'err', progress: 100, is_warn: true, message: `Fatal Error: ${scan.error_message || 'Unknown error'}` });
+          } else {
+            handleLog({ id: 'done', progress: 100, is_warn: false, message: '✓ Scan Complete' });
+          }
         }
-      })
-      .subscribe();
+      } catch(e) { console.error("Polling error:", e); }
+    }, 1000);
 
   },
 

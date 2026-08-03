@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase.js';
+
 import { randomUUID } from 'crypto';
 import { exec, spawn } from 'child_process';
 import util from 'util';
@@ -12,65 +12,76 @@ import { GoogleGenAI } from '@google/genai';
 const execAsync = util.promisify(exec);
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || 'dummy' });
 
+async function insertDB(table, data) {
+    if (!supabase) {
+        console.error(`[DB Mock] Insert into ${table}:`, JSON.stringify(data).substring(0, 100));
+        return { data: null, error: null };
+    }
+    const { data: result, error } = await supabase.from(table).insert(data);
+    if (error) console.error(`SQL ERROR [INSERT ${table}]:`, error.message, error.details || '');
+    return { data: result, error };
+}
+
+async function updateDB(table, data, matchColumn, matchValue) {
+    if (!supabase) {
+        console.error(`[DB Mock] Update ${table} where ${matchColumn}=${matchValue}`);
+        return { data: null, error: null };
+    }
+    const { data: result, error } = await supabase.from(table).update(data).eq(matchColumn, matchValue);
+    if (error) console.error(`SQL ERROR [UPDATE ${table}]:`, error.message, error.details || '');
+    return { data: result, error };
+}
+
 async function startLocalServer(dir) {
-    // Try to start the app locally if possible
     let portMatch = null;
     let localProcess = null;
+    if (!await fs.pathExists(path.join(dir, 'package.json'))) return null;
     
-    // Check if package.json exists
-    if (!await fs.pathExists(path.join(dir, 'package.json'))) {
-        return null; // Not a Node project, can't easily start
-    }
-    
-    // Install deps
     console.log("Installing dependencies...");
     try {
         await execAsync('npm install --legacy-peer-deps', { cwd: dir, timeout: 60000 });
-    } catch(e) { console.error("npm install failed", e); }
+    } catch(e) { console.error("npm install failed", e.message); }
     
     return new Promise((resolve) => {
         localProcess = spawn('npm', ['start'], { cwd: dir, shell: true });
-        
         const checkOutput = (data) => {
             const str = data.toString();
-            console.log("[LOCAL SERVER]:", str);
+            console.log("[LOCAL SERVER]:", str.trim());
             const match = str.match(/(http:\/\/localhost:\d+|http:\/\/127\.0\.0\.1:\d+)/);
             if (match && !portMatch) {
                 portMatch = match[1];
                 resolve({ url: portMatch, process: localProcess });
             }
         };
-        
         localProcess.stdout.on('data', checkOutput);
         localProcess.stderr.on('data', checkOutput);
-        
-        // Timeout after 15 seconds
         setTimeout(() => {
-            if (!portMatch) {
-                console.log("Local server didn't emit a URL, trying fallback port 3000");
-                resolve({ url: 'http://localhost:3000', process: localProcess });
-            }
+            if (!portMatch) resolve({ url: 'http://localhost:3000', process: localProcess });
         }, 15000);
     });
 }
 
-export async function runScan(scanId, repoUrl, deployUrl) {
+let supabase = null;
+export async function runScan(scanId, repoUrl, deployUrl, sbInstance) {
+  supabase = sbInstance;
   let targetUrl = deployUrl;
   let localServer = null;
   const tmpDir = path.join(os.tmpdir(), `lg-scan-${randomUUID().split('-')[0]}`);
 
+  console.log("SCAN STARTED");
+
   const logTerminal = async (msg, progress, isWarn = false) => {
-    try {
-      await supabase.from('scan_logs').insert([{ scan_id: scanId, message: msg, progress, is_warn: isWarn }]);
-    } catch(e) { console.error(e); }
+    console.log(`[SCAN LOG]: ${msg}`);
+    await insertDB('scan_logs', [{ scan_id: scanId, message: msg, progress, is_warn: isWarn }]);
   };
 
   try {
-    await supabase.from('scans').update({ status: 'running' }).eq('id', scanId);
+    await updateDB('scans', { status: 'running' }, 'id', scanId);
     
     // 1. Repository Init
-    await logTerminal(`? Cloning Repository from ${repoUrl}...`, 5);
+    await logTerminal(`✓ Cloning Repository from ${repoUrl}...`, 5);
     await execAsync(`git clone --depth 1 ${repoUrl} ${tmpDir}`);
+    console.log("REPOSITORY CLONED");
     
     const packageJsonPath = path.join(tmpDir, 'package.json');
     let framework = 'Unknown', lang = 'Unknown';
@@ -85,24 +96,26 @@ export async function runScan(scanId, repoUrl, deployUrl) {
         lang = 'Python';
     }
     
-    await logTerminal(`? Detected ${lang} / ${framework}`, 10);
+    console.log("FRAMEWORK DETECTED", framework, lang);
+    await logTerminal(`✓ Detected ${lang} / ${framework}`, 10);
     
     // 2. Start Application
     if (!targetUrl) {
-        await logTerminal(`? No deploy URL provided. Attempting to start locally...`, 15);
+        await logTerminal(`✓ No deploy URL provided. Attempting to start locally...`, 15);
         localServer = await startLocalServer(tmpDir);
         if (localServer) {
             targetUrl = localServer.url;
-            await logTerminal(`? App running at ${targetUrl}`, 25);
+            await logTerminal(`✓ App running at ${targetUrl}`, 25);
         } else {
             throw new Error("Could not start local server. Please provide a Deploy URL.");
         }
     } else {
-        await logTerminal(`? Using provided Deploy URL: ${targetUrl}`, 25);
+        await logTerminal(`✓ Using provided Deploy URL: ${targetUrl}`, 25);
     }
     
     // 3. Playwright Crawler
-    await logTerminal(`? Launching Playwright Crawler...`, 30);
+    await logTerminal(`✓ Launching Playwright Crawler...`, 30);
+    console.log("PLAYWRIGHT STARTED");
     const browser = await chromium.launch({ headless: true });
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
     const page = await context.newPage();
@@ -136,7 +149,8 @@ export async function runScan(scanId, repoUrl, deployUrl) {
         if (visited.has(url)) continue;
         visited.add(url);
         
-        await logTerminal(`? Crawling ${url}...`, progress += 5);
+        console.log("PAGE DISCOVERED", url);
+        await logTerminal(`✓ Crawling ${url}...`, progress += 5);
         
         let status = 200;
         let loadTime = 0;
@@ -151,6 +165,7 @@ export async function runScan(scanId, repoUrl, deployUrl) {
             issues.push({
                 id: `BUG-LG-${randomUUID().split('-')[0].toUpperCase()}`, scan_id: scanId, title: `Page Load Failed`, status: 'OPEN', severity: 'Critical', area: 'Performance', root_cause: e.message, affected_file: url, affected_url: url, console_error: e.message, stack_trace: e.stack, confidence: 90
             });
+            console.log("ISSUE GENERATED", "Page Load Failed");
         }
         
         // Eval Builder (Axe)
@@ -162,9 +177,13 @@ export async function runScan(scanId, repoUrl, deployUrl) {
         
         // Screenshot
         const snapPath = path.join(tmpDir, `snap-${visited.size}.png`);
-        await page.screenshot({ path: snapPath, fullPage: true });
-        // For real usage we'd upload to Supabase Storage, here we use a placeholder or base64
-        screenshots.push({ scan_id: scanId, path: url, url: `https://via.placeholder.com/800x600?text=${encodeURIComponent(new URL(url).pathname)}` });
+        try {
+            await page.screenshot({ path: snapPath, fullPage: true });
+            console.log("SCREENSHOT SAVED", snapPath);
+            screenshots.push({ scan_id: scanId, path: url, url: `https://via.placeholder.com/800x600?text=${encodeURIComponent(new URL(url).pathname)}` });
+        } catch (e) {
+            console.error("Screenshot failed", e.message);
+        }
         
         const perfScore = status >= 400 ? 0 : Math.max(0, 100 - (loadTime / 100));
         let nodeStatus = 'green';
@@ -187,19 +206,18 @@ export async function runScan(scanId, repoUrl, deployUrl) {
     
     await browser.close();
     
-    // Add logic for console and network issues
     for (const c of consoleLogs) {
+        console.log("ISSUE GENERATED", "Console Error Detected");
         issues.push({ id: `BUG-LG-${randomUUID().split('-')[0].toUpperCase()}`, scan_id: scanId, title: 'Console Error Detected', status: 'OPEN', severity: 'Medium', area: 'Frontend', root_cause: c.message, affected_file: c.path, affected_url: c.path, console_error: c.message, stack_trace: '', recommendation: 'Investigate client-side exception.', patch: '', confidence: 80 });
     }
     for (const n of networkLogs) {
+        console.log("ISSUE GENERATED", `API Failure ${n.status}`);
         issues.push({ id: `BUG-LG-${randomUUID().split('-')[0].toUpperCase()}`, scan_id: scanId, title: `API Failure ${n.status}`, status: 'OPEN', severity: 'High', area: 'API', root_cause: `Endpoint ${n.url} returned ${n.status}`, affected_file: n.url, affected_url: n.url, console_error: `HTTP ${n.status}`, stack_trace: '', recommendation: 'Check backend logs for the crashing endpoint.', patch: '', confidence: 95 });
     }
 
-    // AI Fix Plans
-    await logTerminal(`? Generating AI RCA and Fix Plans...`, 80);
+    await logTerminal(`✓ Generating AI RCA and Fix Plans...`, 80);
     const aiFixPlans = [];
     if (issues.length > 0) {
-        // We simulate the Gemini AI call if we don't have a real key, otherwise call it
         for (const issue of issues) {
             let rca = "Generated RCA";
             let patch = "Generated Patch";
@@ -210,7 +228,7 @@ export async function runScan(scanId, repoUrl, deployUrl) {
                         contents: `Analyze this web error and provide a 1-sentence root cause and a 1-sentence code fix: ${issue.title} - ${issue.root_cause}`
                     });
                     rca = res.text;
-                } catch(e) { console.error("Gemini failed", e); }
+                } catch(e) { console.error("Gemini failed", e.message); }
             }
             
             aiFixPlans.push({
@@ -225,40 +243,41 @@ export async function runScan(scanId, repoUrl, deployUrl) {
         }
     }
     
-    // 29. Saving Everything to Supabase
-    await logTerminal(`? Saving Everything to Supabase...`, 90);
+    await logTerminal(`✓ Saving Everything to Supabase...`, 90);
     
     const journeyMapId = randomUUID();
-    await supabase.from('journey_maps').insert([{ id: journeyMapId, scan_id: scanId, name: 'Primary Discovery Flow' }]);
-    if (mockNodes.length > 0) await supabase.from('journey_nodes').insert(mockNodes);
-    if (mockEdges.length > 0) await supabase.from('journey_edges').insert(mockEdges);
+    await insertDB('journey_maps', [{ id: journeyMapId, scan_id: scanId, name: 'Primary Discovery Flow' }]);
+    if (mockNodes.length > 0) await insertDB('journey_nodes', mockNodes);
+    if (mockEdges.length > 0) await insertDB('journey_edges', mockEdges);
     
-    if (consoleLogs.length > 0) await supabase.from('console_logs').insert(consoleLogs);
-    if (networkLogs.length > 0) await supabase.from('network_logs').insert(networkLogs);
-    if (screenshots.length > 0) await supabase.from('screenshots').insert(screenshots);
-    if (issues.length > 0) await supabase.from('vulnerabilities').insert(issues);
-    if (aiFixPlans.length > 0) await supabase.from('ai_fix_plans').insert(aiFixPlans);
+    if (consoleLogs.length > 0) await insertDB('console_logs', consoleLogs);
+    if (networkLogs.length > 0) await insertDB('network_logs', networkLogs);
+    if (screenshots.length > 0) await insertDB('screenshots', screenshots);
+    if (issues.length > 0) await insertDB('vulnerabilities', issues);
+    if (aiFixPlans.length > 0) await insertDB('ai_fix_plans', aiFixPlans);
     
     const riskScore = Math.max(0, 100 - (issues.length * 15));
     
-    await supabase.from('reports').insert([{ scan_id: scanId, report_data: { summary: "Complete Analysis Generated", score: riskScore } }]);
-    await supabase.from('dashboard_history').insert([{ snapshot_data: { date: new Date(), score: riskScore } }]);
+    await insertDB('reports', [{ scan_id: scanId, report_data: { summary: "Complete Analysis Generated", score: riskScore } }]);
+    await insertDB('dashboard_history', [{ snapshot_data: { date: new Date(), score: riskScore } }]);
+    console.log("REPORT SAVED");
     
-    await supabase.from('scans').update({ 
+    await updateDB('scans', { 
       status: 'completed', 
       score: riskScore, 
       api_failures: issues.length, 
       error_message: null 
-    }).eq('id', scanId);
+    }, 'id', scanId);
     
-    await logTerminal(`? Scan Complete`, 100);
+    await logTerminal(`✓ Scan Complete`, 100);
+    console.log("SCAN COMPLETE");
 
   } catch (error) {
-    console.error("Scan Error:", error);
-    await supabase.from('scans').update({ status: 'failed', error_message: error.message }).eq('id', scanId);
-    await logTerminal(`? Error: ${error.message}`, 100, true);
+    console.error("Scan Error Exception Block:", error.message, error.stack);
+    await updateDB('scans', { status: 'failed', error_message: error.message }, 'id', scanId);
+    await logTerminal(`Error: ${error.message}`, 100, true);
   } finally {
      if (localServer && localServer.process) localServer.process.kill();
-     try { await fs.remove(tmpDir); } catch(e) {}
+     try { await fs.remove(tmpDir); } catch(e) { console.error("Temp dir removal failed", e.message); }
   }
 }
