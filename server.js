@@ -57,11 +57,11 @@ app.get('/api/dashboard', asyncHandler(async (req, res) => {
 }));
 
 app.get('/api/reports/:scanId', asyncHandler(async (req, res) => {
-  const { data: report } = await supabase.from('reports').select('*').eq('scan_id', req.params.scanId).single();
-  if (!report) {
+  if (!supabase) {
     return res.json({ report_data: { summary: "Demo Report Generated", score: 85, pagesCrawled: 5, issuesFound: 1, recommendations: "None" } });
   }
-  res.json(report);
+  const { data: report } = await supabase.from('reports').select('*').eq('scan_id', req.params.scanId).single();
+  res.json(report || {});
 }));
 
 app.get('/api/repo/preview', asyncHandler(async (req, res) => {
@@ -328,13 +328,13 @@ app.get('/api/scans', asyncHandler(async (req, res) => {
 app.get('/api/issues', asyncHandler(async (req, res) => {
   const sid = req.query.scanId || await getLatestScanId();
   if (!sid) return res.json([]);
-  const { data: issues } = await supabase.from('vulnerabilities').select('*').eq('scan_id', sid);
-  if (!issues || issues.length === 0) {
+  if (!supabase) {
     return res.json([
       { id: `BUG-1`, scan_id: sid, title: 'Demo XSS Vulnerability', status: 'OPEN', severity: 'Critical', area: 'Security', root_cause: 'Unsanitized user input.', affected_file: '/search', affected_url: '/search', confidence: 95 }
     ]);
   }
-  res.json(issues);
+  const { data: issues } = await supabase.from('vulnerabilities').select('*').eq('scan_id', sid);
+  res.json(issues || []);
 }));
 
 app.get('/api/issues/:id', asyncHandler(async (req, res) => {
@@ -346,21 +346,19 @@ app.get('/api/issues/:id', asyncHandler(async (req, res) => {
 app.get('/api/broken_flows', asyncHandler(async (req, res) => {
   const sid = req.query.scanId || await getLatestScanId();
   if (!sid) return res.json([]);
-  const { data: flows } = await supabase.from('broken_flows').select('*').eq('scan_id', sid);
-  if (!flows || flows.length === 0) {
+  if (!supabase) {
     return res.json([
       { id: `BF-1`, scan_id: sid, name: 'Demo Login Broken', fail_step: 'Click Login', score: 20, severity: 'Critical' }
     ]);
   }
-  res.json(flows);
+  const { data: flows } = await supabase.from('broken_flows').select('*').eq('scan_id', sid);
+  res.json(flows || []);
 }));
 
 app.get('/api/journeys', asyncHandler(async (req, res) => {
   const sid = req.query.scanId || await getLatestScanId();
   if (!sid) return res.json({ nodes: [], edges: [] });
-  const { data: nodes } = await supabase.from('journey_nodes').select('*').eq('scan_id', sid);
-  const { data: edges } = await supabase.from('journey_edges').select('*').eq('scan_id', sid);
-  if ((!nodes || nodes.length === 0) && (!edges || edges.length === 0)) {
+  if (!supabase) {
     return res.json({
       nodes: [
         { scan_id: sid, path: '/home', status_code: 200, load_time: 150, perf_score: 95, a11y_score: 98 },
@@ -371,32 +369,34 @@ app.get('/api/journeys', asyncHandler(async (req, res) => {
       ]
     });
   }
+  const { data: nodes } = await supabase.from('journey_nodes').select('*').eq('scan_id', sid);
+  const { data: edges } = await supabase.from('journey_edges').select('*').eq('scan_id', sid);
   res.json({ nodes: nodes || [], edges: edges || [] });
 }));
 
 app.get('/api/evals', asyncHandler(async (req, res) => {
   const sid = req.query.scanId || await getLatestScanId();
   if (!sid) return res.json([]);
-  const { data: evals } = await supabase.from('evals').select('*').eq('scan_id', sid);
-  if (!evals || evals.length === 0) {
+  if (!supabase) {
     return res.json([
       { scan_id: sid, metric: 'Accessibility', score: 92, details: 'Demo data' },
       { scan_id: sid, metric: 'Performance', score: 85, details: 'Demo data' }
     ]);
   }
-  res.json(evals);
+  const { data: evals } = await supabase.from('evals').select('*').eq('scan_id', sid);
+  res.json(evals || []);
 }));
 
 app.get('/api/ai_fix_plans', asyncHandler(async (req, res) => {
   const { issueId } = req.query;
   if (!issueId) return res.json([]);
-  const { data: plans } = await supabase.from('ai_fix_plans').select('*').eq('vulnerability_id', issueId);
-  if (!plans || plans.length === 0) {
+  if (!supabase) {
     return res.json([
       { id: 'FIX-1', vulnerability_id: issueId, problem_analysis: JSON.stringify({ bug_id: issueId, severity: 'High', root_cause: 'Demo issue' }), engineering_solution: JSON.stringify({ step_by_step: ['Fix demo issue'] }), developer_prompt: 'Fix the issue', model: 'Gemini' }
     ]);
   }
-  res.json(plans);
+  const { data: plans } = await supabase.from('ai_fix_plans').select('*').eq('vulnerability_id', issueId);
+  res.json(plans || []);
 }));
 
 app.get('/api/ai/fix/recent', asyncHandler(async (req, res) => {
