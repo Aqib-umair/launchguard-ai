@@ -18,7 +18,7 @@ app.use(express.static('public'));
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 export const supabase = (supabaseUrl && supabaseKey) 
   ? createClient(supabaseUrl, supabaseKey) 
@@ -123,8 +123,10 @@ app.post('/api/scans/start', asyncHandler(async (req, res) => {
   };
   
   console.log("SUPABASE_URL", process.env.SUPABASE_URL ? 'Loaded' : 'Missing');
-  console.log("SUPABASE_SERVICE_ROLE_KEY", process.env.SUPABASE_SERVICE_ROLE_KEY ? 'Loaded' : 'Missing');
-  console.log("SUPABASE_ANON_KEY", process.env.SUPABASE_ANON_KEY ? 'Loaded' : 'Missing');
+  const anonKey = process.env.SUPABASE_ANON_KEY || '';
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  console.log("SUPABASE_ANON_KEY", anonKey ? `${anonKey.substring(0, 15)}...` : 'Missing');
+  console.log("SUPABASE_SERVICE_ROLE_KEY", serviceKey ? `${serviceKey.substring(0, 15)}...` : 'Missing');
   console.log("OPENROUTER_API_KEY", process.env.OPENROUTER_API_KEY ? 'Loaded' : 'Missing');
 
   console.log("Calling OpenRouter...");
@@ -153,6 +155,15 @@ app.post('/api/scans/start', asyncHandler(async (req, res) => {
     });
   }
 
+  if (!supabase) {
+    return res.status(500).json({
+      provider: 'Supabase',
+      status: 'error',
+      message: 'Supabase client failed to initialize. Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY.',
+      http_status: 500
+    });
+  }
+
   console.log("INSERT PAYLOAD", repositoryObject);
   console.log("Calling Supabase...");
   const { error: repoErr } = await supabase.from('repositories').upsert([repositoryObject]);
@@ -161,6 +172,9 @@ app.post('/api/scans/start', asyncHandler(async (req, res) => {
   if (repoErr) {
     return res.status(500).json({
       provider: 'Supabase',
+      table: 'repositories',
+      operation: 'UPSERT',
+      http_status: 500,
       status: 'error',
       message: repoErr.message || JSON.stringify(repoErr),
       details: repoErr.details || '',
@@ -214,6 +228,9 @@ app.post('/api/scans/start', asyncHandler(async (req, res) => {
   if (scanErr) {
     return res.status(500).json({
       provider: 'Supabase',
+      table: 'scans',
+      operation: 'INSERT',
+      http_status: 500,
       status: 'error',
       message: scanErr.message || JSON.stringify(scanErr),
       details: scanErr.details || '',
