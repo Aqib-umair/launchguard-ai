@@ -1,4 +1,3 @@
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 console.log("LaunchGuard boot started");
 
 window.onerror = function(msg, url, line, col, err) {
@@ -56,14 +55,7 @@ const api = {
   }
 };
 
-let supabaseClient = null;
-async function initSupabase() {
-  const config = await api.get('/api/config');
-  if (config.supabaseUrl) {
-    supabaseClient = createClient(config.supabaseUrl, config.supabaseAnonKey);
-  }
-}
-initSupabase();
+
 
 try {
 // Utilities & Storage
@@ -251,14 +243,15 @@ const actions = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(bodyData)
       });
-      console.log('[DEBUG] After fetch');
-      console.log(`[DEBUG] HTTP status: ${res.status}`);
-      
-      const contentType = res.headers.get('content-type') || '';
-      console.log(`[DEBUG] Content-Type: ${contentType}`);
-      
       const text = await res.text();
-      console.log(`[DEBUG] Raw response (first 500 chars):`, text.substring(0, 500));
+      const contentType = res.headers.get('content-type') || '';
+      console.log({
+        url: res.url,
+        redirected: res.redirected,
+        status: res.status,
+        contentType: contentType,
+        body: text.substring(0, 500)
+      });
       
       let data = {};
       
