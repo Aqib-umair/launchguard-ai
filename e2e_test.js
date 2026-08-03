@@ -1,5 +1,14 @@
 import fetch from 'node-fetch'; // Might need to use global fetch if Node 18+
 
+async function safeJson(res) {
+  const contentType = res.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    return await res.json();
+  }
+  const text = await res.text();
+  console.error(`Expected JSON but got ${contentType}. Body:`, text);
+  return {};
+}
 async function runE2ETest(apiKey) {
   const repoUrl = 'https://github.com/expressjs/express';
   console.log('1. Starting scan on', repoUrl);
@@ -10,7 +19,7 @@ async function runE2ETest(apiKey) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name: 'Express Test', repoUrl, deployUrl: '' })
   });
-  const scanData = await res.json();
+  const scanData = await safeJson(res);
   console.log('Scan created:', scanData);
   
   // Wait a few seconds for issues to be populated
@@ -19,7 +28,7 @@ async function runE2ETest(apiKey) {
   
   // Fetch issues
   res = await fetch('http://localhost:3000/api/issues');
-  const issues = await res.json();
+  const issues = await safeJson(res);
   
   const scanIssues = issues.filter(i => i.scan_id === scanData.id);
   if (scanIssues.length === 0) {
@@ -49,7 +58,7 @@ async function runE2ETest(apiKey) {
     return;
   }
   
-  const fixData = await res.json();
+  const fixData = await safeJson(res);
   console.log('\n=============================');
   console.log('AI Fix Request Succeeded!');
   console.log('=============================');

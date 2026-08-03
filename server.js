@@ -88,108 +88,52 @@ app.get('/api/config', (req, res) => {
 
 // ── Signup ────────────────────────────────────────────────────
 app.post('/api/auth/signup', asyncHandler(async (req, res) => {
-  const { name, email, password, github_username } = req.body;
-  console.log('[SIGNUP] Step 1: request received for', email);
+  const { email, password, name, github_username } = req.body;
+  if (!supabase) throw new Error('Supabase not initialized');
 
-  if (!supabase || !supabaseAdmin) {
-    const missing = [];
-    if (!process.env.SUPABASE_URL) missing.push('SUPABASE_URL');
-    if (!process.env.SUPABASE_ANON_KEY) missing.push('SUPABASE_ANON_KEY');
-    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) missing.push('SUPABASE_SERVICE_ROLE_KEY');
-    throw new Error(`Supabase client initialization failed in lib/supabase.js.\nMissing environment variables: ${missing.join(', ')}.\ncreateClient() was bypassed because variables were undefined.`);
-  }
-
-  console.log('[SIGNUP] Step 2: calling supabase.auth.signUp');
   const { data: authData, error: authError } = await supabase.auth.signUp({
     email,
     password,
-    options: {
-      data: { full_name: name, github_username }
-    }
+    options: { data: { full_name: name, github_username } }
   });
 
   if (authError) {
-    console.error('[SIGNUP] Step 2 FAILED:', authError.message);
     return res.status(400).json({ success: false, error: authError.message });
   }
 
-  const authUserId = authData.user.id;
-  console.log('[SIGNUP] Step 2 OK: auth user created, id =', authUserId);
-
-  console.log('[SIGNUP] Step 3: inserting into public.users');
-  const { data: profile, error: profileError } = await supabaseAdmin
-    .from('users')
-    .insert([{
-      auth_user_id: authUserId,
-      name,
-      email,
-      github_username: github_username || null,
-      login_timestamp: new Date().toISOString(),
-      last_login:      new Date().toISOString(),
-    }])
-    .select()
-    .single();
-
-  if (profileError) {
-    console.error('[SIGNUP] Step 3 FAILED:', profileError.message, profileError.details);
-    return res.status(500).json({ success: false, error: 'Profile creation failed: ' + profileError.message });
-  }
-
-  console.log('[SIGNUP] Step 3 OK: public.users row created, id =', profile.id);
-  console.log('[SIGNUP] Step 4: returning success response with session');
-  res.json({ success: true, user: profile, authUserId, session: authData.session });
+  res.json({ success: true, user: authData.user, session: authData.session });
 }));
 
 // ── Login ─────────────────────────────────────────────────────
 app.post('/api/auth/login', asyncHandler(async (req, res) => {
   const { email, password } = req.body;
-  console.log('[LOGIN] Step 1: request received for', email);
+  if (!supabase) throw new Error('Supabase not initialized');
 
-  if (!supabase) {
-    const missing = [];
-    if (!process.env.SUPABASE_URL) missing.push('SUPABASE_URL');
-    if (!process.env.SUPABASE_ANON_KEY) missing.push('SUPABASE_ANON_KEY');
-    throw new Error(`Supabase anon client initialization failed in lib/supabase.js line 9.\nMissing environment variables: ${missing.join(', ')}.\ncreateClient(supabaseUrl, supabaseAnonKey) was not called.`);
-  }
-
-  console.log('[LOGIN] Step 2: calling supabase.auth.signInWithPassword');
-  const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+  const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({ 
+    email, 
+    password 
+  });
 
   if (signInError) {
-    console.error('[LOGIN] Step 2 FAILED:', signInError.message);
     return res.status(401).json({ success: false, error: signInError.message });
   }
 
-  const authUserId = signInData.user.id;
-  console.log('[LOGIN] Step 2 OK: signed in, id =', authUserId);
-
-  let profile = null;
-  if (supabaseAdmin) {
-    const { data, error: profileError } = await supabaseAdmin
-      .from('users')
-      .update({ last_login: new Date().toISOString() })
-      .eq('auth_user_id', authUserId)
-      .select()
-      .single();
-    if (profileError) {
-      console.warn('[LOGIN] Step 3 WARNING: could not update last_login:', profileError.message);
-    } else {
-      profile = data;
-    }
-  }
-
-  console.log('[LOGIN] Step 3 OK: returning success response');
   res.json({
     success: true,
-    user:    profile || { email, auth_user_id: authUserId },
+    user: signInData.user,
     session: signInData.session,
   });
 }));
 
-// ── Legacy login (deprecated) ──────────────────────────────────
-app.post('/api/login', (req, res) => {
-  res.status(410).json({ success: false, error: 'Deprecated. Use /api/auth/signup or /api/auth/login.' });
-});
+// ── Logout ────────────────────────────────────────────────────
+app.post('/api/auth/logout', asyncHandler(async (req, res) => {
+  if (!supabase) throw new Error('Supabase not initialized');
+  const { error } = await supabase.auth.signOut();
+  if (error) {
+    return res.status(400).json({ success: false, error: error.message });
+  }
+  res.json({ success: true });
+}));
 
 // ── Dashboard ─────────────────────────────────────────────────
 app.get('/api/dashboard', asyncHandler(async (req, res) => {
