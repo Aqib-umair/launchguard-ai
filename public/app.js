@@ -18,17 +18,18 @@ const api = {
     try { 
       console.log(`[FETCH GET] ${path}`);
       const res = await fetch(path);
-      const text = await res.text();
-      if (!res.ok) {
-        throw new Error(path + " failed: " + text);
-      }
       const contentType = res.headers.get('content-type') || '';
+      const text = await res.text();
+      console.log(`[DEBUG] Raw response (first 500 chars):`, text.substring(0, 500));
+      
+      if (!res.ok) {
+        console.error(path + " failed with status " + res.status);
+      }
+      
       if (contentType.includes('application/json')) {
         return JSON.parse(text);
       } else {
-        console.error(`[FETCH GET] Non-JSON response from ${path}`);
-        console.error(`Status: ${res.status}`);
-        console.error(`Body: ${text}`);
+        console.error("Server returned HTML instead of JSON\n" + text);
         return {};
       }
     } catch(e) { console.error('fetch failed', e); return {}; } 
@@ -37,17 +38,18 @@ const api = {
     try { 
       console.log(`[FETCH POST] ${path}`);
       const res = await fetch(path, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
-      const text = await res.text();
-      if (!res.ok) {
-        throw new Error(path + " failed: " + text);
-      }
       const contentType = res.headers.get('content-type') || '';
+      const text = await res.text();
+      console.log(`[DEBUG] Raw response (first 500 chars):`, text.substring(0, 500));
+      
+      if (!res.ok) {
+        console.error(path + " failed with status " + res.status);
+      }
+      
       if (contentType.includes('application/json')) {
         return JSON.parse(text);
       } else {
-        console.error(`[FETCH POST] Non-JSON response from ${path}`);
-        console.error(`Status: ${res.status}`);
-        console.error(`Body: ${text}`);
+        console.error("Server returned HTML instead of JSON\n" + text);
         return {};
       }
     } catch(e) { console.error('fetch failed', e); return {}; } 
@@ -206,93 +208,97 @@ const components = {
 const actions = {
   login: async (e, isRegister) => {
     e.preventDefault();
+    console.log('[DEBUG] Submit fired');
     const form = e.target;
     const submitBtn = form.querySelector('button[type="submit"]');
-    submitBtn.disabled = true;
-    submitBtn.innerText = 'Authenticating...';
+    
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerText = 'Authenticating...';
+    }
 
     const name    = form.name    ? form.name.value.trim()    : '';
     const email   = form.email   ? form.email.value.trim()   : '';
     const password= form.password? form.password.value.trim(): '';
     const username= form.username? form.username.value.trim(): '';
 
-    console.log('[AUTH] Step 1: form submitted. isRegister =', isRegister, 'email =', email);
-
     if (!email || !password) {
       alert('Email and password are required.');
-      submitBtn.disabled = false;
-      submitBtn.innerText = isRegister ? 'Create Account' : 'Login';
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerText = isRegister ? 'Create Account' : 'Login';
+      }
       return;
     }
     if (isRegister && !name) {
       alert('Full name is required for signup.');
-      submitBtn.disabled = false;
-      submitBtn.innerText = 'Create Account';
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerText = 'Create Account';
+      }
       return;
     }
+
+    console.log('[DEBUG] Validation passed');
 
     try {
       let url = isRegister ? '/api/auth/signup' : '/api/auth/login';
       let bodyData = isRegister ? { name, email, password, github_username: username } : { email, password };
       
-      console.log(`[AUTH] Step 2: calling ${url}`);
+      console.log('[DEBUG] Before fetch');
       let res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(bodyData)
       });
+      console.log('[DEBUG] After fetch');
+      console.log(`[DEBUG] HTTP status: ${res.status}`);
+      
+      const contentType = res.headers.get('content-type') || '';
+      console.log(`[DEBUG] Content-Type: ${contentType}`);
       
       const text = await res.text();
-      const contentType = res.headers.get('content-type') || '';
+      console.log(`[DEBUG] Raw response (first 500 chars):`, text.substring(0, 500));
+      
       let data = {};
       
       if (contentType.includes('application/json')) {
         data = JSON.parse(text);
       } else {
-        console.error(`[AUTH] Non-JSON response from ${res.url}`);
-        console.error(`Status: ${res.status}`);
-        console.error(`Content-Type: ${contentType}`);
-        console.error(`Body: ${text.substring(0, 500)}...`);
-        
-        let serverIdentity = "Unknown";
-        if (text.includes("Vercel")) serverIdentity = "Vercel Edge/Serverless Error";
-        if (text.includes("<html")) serverIdentity = "HTML Document (possibly index.html fallback)";
-        
-        alert(`Server returned HTML instead of JSON.\nStatus: ${res.status}\nURL: ${res.url}\nType: ${contentType}\nSource: ${serverIdentity}\n\nCheck console for details.`);
-        submitBtn.disabled = false;
-        submitBtn.innerText = isRegister ? 'Create Account' : 'Login';
+        console.error("Server returned HTML instead of JSON\n" + text);
+        alert(`Server returned HTML instead of JSON.\nStatus: ${res.status}\nURL: ${res.url}\nCheck console for details.`);
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerText = isRegister ? 'Create Account' : 'Login';
+        }
         return;
       }
-
-      console.log('[AUTH] Step 3: server response:', data);
 
       if (!res.ok || !data.success) {
         const msg = data.error || 'Authentication failed. Please try again.';
-        console.error('[AUTH] Step 3 FAILED:', msg);
         alert(msg);
-        submitBtn.disabled = false;
-        submitBtn.innerText = isRegister ? 'Create Account' : 'Login';
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerText = isRegister ? 'Create Account' : 'Login';
+        }
         return;
       }
 
-      console.log('[AUTH] Step 4: setting currentUser in localStorage');
       currentUser = data.user;
       store.setJSON('user', currentUser);
 
-      // Store session tokens if provided
       if (data.session) {
         store.setJSON('session', { access_token: data.session.access_token, refresh_token: data.session.refresh_token });
-        console.log('[AUTH] Step 4a: session tokens stored.');
       }
 
-      console.log('[AUTH] Step 5: redirecting to dashboard');
       location.hash = 'dashboard';
 
     } catch (err) {
-      console.error('[AUTH] Unexpected error:', err);
       alert('An unexpected error occurred: ' + err.message);
-      submitBtn.disabled = false;
-      submitBtn.innerText = isRegister ? 'Create Account' : 'Login';
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerText = isRegister ? 'Create Account' : 'Login';
+      }
     }
   },
   logout: () => {
@@ -670,7 +676,7 @@ const views = {
           </div>
           
           <form class="auth-form" onsubmit="actions.login(event, ${isRegister})">
-            ${!isLogin ? `
+            ${isRegister ? `
               <div class="auth-field">
                 <label>Full Name</label>
                 <input name="name" type="text" placeholder="Jane Doe" required>
@@ -679,12 +685,7 @@ const views = {
                 <label>Username</label>
                 <input name="username" type="text" placeholder="janedoe" required>
               </div>
-            ` : `
-              <div class="auth-field">
-                <label>Full Name</label>
-                <input name="name" type="text" placeholder="Jane Doe" required>
-              </div>
-            `}
+            ` : ''}
             <div class="auth-field">
               <label>Email Address</label>
               <input type="email" name="email" placeholder="jane@company.com" required>
@@ -1499,16 +1500,15 @@ const views = {
             clearInterval(intv);
             
             const text = await res.text();
+            console.log(text.substring(0,500));
             const contentType = res.headers.get('content-type') || '';
             let data;
             
             if (contentType.includes('application/json')) {
               data = JSON.parse(text);
             } else {
-              console.error("[AI Fix Assistant] Non-JSON response from /api/ai/fix");
-              console.error("Status:", res.status);
-              console.error("Body:", text);
-              throw new Error(\`Server returned an invalid response (Status: \${res.status}). Please restart your Node server.\`);
+              console.error("Server returned HTML instead of JSON\\n" + text);
+              throw new Error("Server returned HTML instead of JSON. Status: " + res.status);
             }
             
             if(!res.ok) {
