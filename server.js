@@ -65,7 +65,14 @@ app.get('/api/repo/preview', asyncHandler(async (req, res) => {
   const { url } = req.query;
   if (!url || !url.includes('github.com')) return res.status(400).json({ error: 'Valid GitHub URL required.' });
   
-  const repoId = url.replace('https://github.com/', '').replace(/\/$/, '');
+  let cleanUrl = url.trim();
+  cleanUrl = cleanUrl.replace("git@github.com:", "");
+  cleanUrl = cleanUrl.replace("https://github.com/", "");
+  cleanUrl = cleanUrl.replace("http://github.com/", "");
+  cleanUrl = cleanUrl.replace(/\.git$/, "");
+  cleanUrl = cleanUrl.replace(/\/$/, "");
+  const [owner, repo] = cleanUrl.split("/");
+  const repoId = `${owner}/${repo}`;
   let preview = {
     repo: repoId,
     name: repoId.split('/')[1] || repoId,
@@ -146,7 +153,18 @@ app.get('/api/repo/preview', asyncHandler(async (req, res) => {
 app.post('/api/scans/start', asyncHandler(async (req, res) => {
   console.log('ENDPOINT HIT: /api/scans/start', req.body);
   const { name, repoUrl, deployUrl, user_id } = req.body;
-  const repoId = repoUrl ? repoUrl.replace('https://github.com/', '').replace(/\/$/, '') : `repo-${randomUUID().split('-')[0]}`;
+  
+  let repoId = `repo-${randomUUID().split('-')[0]}`;
+  if (repoUrl) {
+      let cleanUrl = repoUrl.trim();
+      cleanUrl = cleanUrl.replace("git@github.com:", "");
+      cleanUrl = cleanUrl.replace("https://github.com/", "");
+      cleanUrl = cleanUrl.replace("http://github.com/", "");
+      cleanUrl = cleanUrl.replace(/\.git$/, "");
+      cleanUrl = cleanUrl.replace(/\/$/, "");
+      const [owner, repo] = cleanUrl.split("/");
+      repoId = `${owner}/${repo}`;
+  }
   
   const repositoryObject = { 
     id: repoId, 

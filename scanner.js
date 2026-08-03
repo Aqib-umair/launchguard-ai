@@ -87,12 +87,30 @@ export async function runScan(scanId, repoUrl, deployUrl, sbInstance) {
   try {
     await updateDB('scans', { status: 'running' }, 'id', scanId);
     
-    const repoId = repoUrl.replace('https://github.com/', '').replace(/\/$/, '');
+    let cleanUrl = repoUrl.trim();
+    cleanUrl = cleanUrl.replace("git@github.com:", "");
+    cleanUrl = cleanUrl.replace("https://github.com/", "");
+    cleanUrl = cleanUrl.replace("http://github.com/", "");
+    cleanUrl = cleanUrl.replace(/\.git$/, "");
+    cleanUrl = cleanUrl.replace(/\/$/, "");
+    const [owner, repo] = cleanUrl.split("/");
+    const repoId = `${owner}/${repo}`;
     
+    const apiUrl = `https://api.github.com/repos/${owner}/${repo}`;
+    console.log(`Repository URL: ${repoUrl}`);
+    console.log(`Owner: ${owner}`);
+    console.log(`Repository: ${repo}`);
+    console.log(`GitHub API URL: ${apiUrl}`);
+
     // 1. Download repository (5%)
     await logTerminal(`✓ Fetching repository metadata...`, 2);
-    const ghRes = await fetch(`https://api.github.com/repos/${repoId}`);
-    if (!ghRes.ok) throw new Error(`GitHub API Error: ${ghRes.statusText}`);
+    const ghRes = await fetch(apiUrl);
+    if (!ghRes.ok) {
+        if (ghRes.status === 404) {
+            console.log(`Failed URL: ${apiUrl}`);
+        }
+        throw new Error(`GitHub API Error: ${ghRes.statusText}`);
+    }
     const ghData = await ghRes.json();
     const branch = ghData.default_branch || 'main';
     
