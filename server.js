@@ -122,12 +122,25 @@ app.post('/api/scans/start', asyncHandler(async (req, res) => {
     description: ''
   };
   
+  console.log("SUPABASE_URL", process.env.SUPABASE_URL ? 'Loaded' : 'Missing');
+  console.log("SUPABASE_SERVICE_ROLE_KEY", process.env.SUPABASE_SERVICE_ROLE_KEY ? 'Loaded' : 'Missing');
+  console.log("SUPABASE_ANON_KEY", process.env.SUPABASE_ANON_KEY ? 'Loaded' : 'Missing');
+  console.log("OPENROUTER_API_KEY", process.env.OPENROUTER_API_KEY ? 'Loaded' : 'Missing');
+
   console.log("INSERT PAYLOAD", repositoryObject);
+  console.log("Calling Supabase...");
   const { error: repoErr } = await supabase.from('repositories').upsert([repositoryObject]);
   console.log(repoErr);
   
   if (repoErr) {
-    return res.status(500).json(repoErr);
+    return res.status(500).json({
+      provider: 'Supabase',
+      status: 'error',
+      message: repoErr.message || JSON.stringify(repoErr),
+      details: repoErr.details || '',
+      code: repoErr.code || '',
+      hint: repoErr.hint || ''
+    });
   }
 
   // Fetch GitHub Metadata after successful insert
@@ -169,10 +182,18 @@ app.post('/api/scans/start', asyncHandler(async (req, res) => {
 
   const id = `SCAN-LG-2026-${randomUUID().split('-')[0].toUpperCase()}`;
   const scanName = name || ghName || 'Test Scan';
+  console.log("Calling Supabase...");
   const { error: scanErr } = await supabase.from('scans').insert([{ id, repository_id: repoId, name: scanName, deploy_url: deployUrl || '', status: 'queued' }]);
   
   if (scanErr) {
-    return res.status(500).json(scanErr);
+    return res.status(500).json({
+      provider: 'Supabase',
+      status: 'error',
+      message: scanErr.message || JSON.stringify(scanErr),
+      details: scanErr.details || '',
+      code: scanErr.code || '',
+      hint: scanErr.hint || ''
+    });
   }
   
   // Start Scanner Asynchronously
