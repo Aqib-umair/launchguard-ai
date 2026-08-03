@@ -20,73 +20,9 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
 
-// Mock DB for local execution when Supabase fails or is dummy
-export const memDB = {
-    scans: [], scan_logs: [], repositories: [], vulnerabilities: [], broken_flows: [],
-    journey_nodes: [], journey_edges: [], network_logs: [], console_logs: [],
-    screenshots: [], evals: [], ai_fix_plans: [], reports: [], dashboard_history: []
-};
-
-// Create a mock Supabase client if real one is unavailable
-const mockSupabase = {
-    from: (table) => ({
-        insert: async (data) => {
-            if (!memDB[table]) memDB[table] = [];
-            const arr = Array.isArray(data) ? data : [data];
-            memDB[table].push(...arr);
-            return { data: arr, error: null };
-        },
-        upsert: async (data) => {
-            if (!memDB[table]) memDB[table] = [];
-            const arr = Array.isArray(data) ? data : [data];
-            memDB[table].push(...arr); // simplified upsert
-            return { data: arr, error: null };
-        },
-        update: (data) => ({
-            eq: async (col, val) => {
-                if (!memDB[table]) return { data: null, error: null };
-                for (const item of memDB[table]) {
-                    if (item[col] === val) Object.assign(item, data);
-                }
-                return { data: null, error: null };
-            }
-        }),
-        select: (cols) => ({
-            eq: (col, val) => {
-                const chain = {
-                    single: async () => {
-                        const res = memDB[table] ? memDB[table].find(x => x[col] === val) : null;
-                        return { data: res, error: null };
-                    },
-                    order: (orderCol, opts) => chain,
-                    limit: (limitCount) => chain,
-                    then: (res, rej) => {
-                        const items = memDB[table] ? memDB[table].filter(x => x[col] === val) : [];
-                        return Promise.resolve({ data: items, error: null }).then(res, rej);
-                    }
-                };
-                return chain;
-            },
-            order: (col, opts) => {
-                const chain = {
-                    limit: (num) => chain,
-                    single: async () => {
-                        const res = memDB[table] && memDB[table].length > 0 ? memDB[table][memDB[table].length - 1] : null;
-                        return { data: res, error: null };
-                    },
-                    then: (res, rej) => Promise.resolve({ data: memDB[table] || [], error: null }).then(res, rej)
-                };
-                return chain;
-            },
-            single: async () => ({ data: null, error: null }),
-            then: (res, rej) => Promise.resolve({ data: memDB[table] || [], error: null }).then(res, rej)
-        })
-    })
-};
-
 export const supabase = (supabaseUrl && supabaseUrl !== 'dummy' && supabaseKey && supabaseKey !== 'dummy' && !supabaseUrl.includes('localhost:54321')) 
   ? createClient(supabaseUrl, supabaseKey) 
-  : mockSupabase;
+  : null;
 
 const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
