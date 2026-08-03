@@ -72,21 +72,60 @@ app.post('/api/scans/start', asyncHandler(async (req, res) => {
   const { name, repoUrl, deployUrl, user_id } = req.body;
   const repoId = repoUrl ? repoUrl.replace('https://github.com/', '') : `repo-${randomUUID().split('-')[0]}`;
   
-  const { error: repoErr } = await supabase.from('repositories').upsert([{ id: repoId, name: repoUrl || 'Local Test', url: repoUrl || 'http://localhost', user_email: user_id || 'test@example.com' }]);
+  // Fetch GitHub Metadata
+  let ghName = repoUrl || 'Local Test';
+  let ghOwner = '';
+  let ghLanguage = '';
+  let ghStars = 0;
+  let ghDescription = '';
+  
+  if (repoUrl && repoUrl.includes('github.com')) {
+    try {
+      const ghRes = await fetch(`https://api.github.com/repos/${repoId}`);
+      if (ghRes.ok) {
+        const ghData = await ghRes.json();
+        ghName = ghData.name || ghName;
+        ghOwner = ghData.owner?.login || '';
+        ghLanguage = ghData.language || '';
+        ghStars = ghData.stargazers_count || 0;
+        ghDescription = ghData.description || '';
+      }
+    } catch (e) {
+      console.error('GitHub API Fetch failed:', e.message);
+    }
+  }
+
+  const payload = { 
+    id: repoId, 
+    name: ghName, 
+    url: repoUrl || 'http://localhost', 
+    user_email: user_id || 'test@example.com',
+    owner: ghOwner,
+    language: ghLanguage,
+    stars: ghStars,
+    description: ghDescription
+  };
+  
+  console.log('PAYLOAD:', payload);
+  const { error: repoErr } = await supabase.from('repositories').upsert([payload]);
+  
   if (repoErr) {
-    console.error('SQL ERROR [UPSERT repositories]:', repoErr);
-    return res.status(500).json({ error: 'Failed to create repository record' });
+    console.error('SQL ERROR [UPSERT repositories]:', JSON.stringify(repoErr, null, 2));
+    return res.status(500).json({ error: 'Failed to create repository record', sqlError: repoErr });
   }
 
   const id = `SCAN-LG-2026-${randomUUID().split('-')[0].toUpperCase()}`;
-  const { error: scanErr } = await supabase.from('scans').insert([{ id, repository_id: repoId, name: name || 'Test Scan', deploy_url: deployUrl || '', status: 'queued' }]);
+  const scanName = name || ghName || 'Test Scan';
+  const { error: scanErr } = await supabase.from('scans').insert([{ id, repository_id: repoId, name: scanName, deploy_url: deployUrl || '', status: 'queued' }]);
+  
   if (scanErr) {
-    console.error('SQL ERROR [INSERT scans]:', scanErr);
-    return res.status(500).json({ error: 'Failed to create scan record' });
+    console.error('SQL ERROR [INSERT scans]:', JSON.stringify(scanErr, null, 2));
+    return res.status(500).json({ error: 'Failed to create scan record', sqlError: scanErr });
   }
   
+  // Start Scanner Asynchronously
   import('./scanner.js').then(({ runScan }) => runScan(id, repoUrl, deployUrl, supabase)).catch(console.error);
-  res.status(201).json({ id, name, status: 'queued' });
+  res.status(201).json({ id, name: scanName, status: 'queued' });
 }));
 
 app.get('/api/scan_logs', asyncHandler(async (req, res) => {
