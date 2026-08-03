@@ -972,7 +972,7 @@ const views = {
       `;
 
       // 2. Build Interactive Journey with Mermaid
-      let mermaidGraph = 'graph TD\\n';
+      let mermaidGraph = 'graph TD\n';
       const nodeIds = {};
       nodes.forEach((n, i) => {
         const id = 'node' + i;
@@ -981,14 +981,14 @@ const views = {
                        (n.status === 'yellow' ? 'fill:#2a1f10,stroke:#ffb84d,stroke-width:2px' :
                        'fill:#102a15,stroke:#4dff4d,stroke-width:2px');
         const pathLabel = n.path === '/' ? '/ (Home)' : n.path;
-        mermaidGraph += '  ' + id + '["' + pathLabel + '"]\\n';
-        mermaidGraph += '  style ' + id + ' ' + status + '\\n';
+        mermaidGraph += '  ' + id + '["' + pathLabel + '"]\n';
+        mermaidGraph += '  style ' + id + ' ' + status + '\n';
       });
       edges.forEach((e) => {
         const sourceId = nodeIds[e.source_path];
         const targetId = nodeIds[e.target_path];
         if (sourceId && targetId) {
-          mermaidGraph += '  ' + sourceId + ' --> ' + targetId + '\\n';
+          mermaidGraph += '  ' + sourceId + ' --> ' + targetId + '\n';
         }
       });
 
@@ -1409,25 +1409,25 @@ const views = {
         };
 
         window.renderModelLists = () => {
-          document.getElementById("free-models-list").innerHTML = freeModels.map(m => `
-            <div class="model-card ${window.selectedAIModel === m.id ? 'active' : ''}" onclick="window.selectModel('${m.id}', null)">
-              <div>
-                <div style="font-weight:bold; color:#fff; margin-bottom:4px;">${m.name}</div>
-                <div style="font-size:12px; color:var(--muted);">${m.desc}</div>
-              </div>
-              <div>${window.selectedAIModel === m.id ? '<span style="color:var(--lime);">✓</span>' : ''}</div>
-            </div>
-          `).join("");
+          document.getElementById("free-models-list").innerHTML = freeModels.map(m => 
+    "<div class=\"model-card " + (window.selectedAIModel === m.id ? "active" : "") + "\" onclick=\"window.selectModel('" + m.id + "', null)\">" +
+      "<div>" +
+        "<div style=\"font-weight:bold; color:#fff; margin-bottom:4px;\">" + m.name + "</div>" +
+        "<div style=\"font-size:12px; color:var(--muted);\">" + m.desc + "</div>" +
+      "</div>" +
+      "<div>" + (window.selectedAIModel === m.id ? "<span style=\"color:var(--lime);\">✓</span>" : "") + "</div>" +
+    "</div>"
+  ).join("");
           
-          document.getElementById("premium-models-list").innerHTML = premiumModels.map(m => `
-            <div class="model-card ${window.selectedAIModel === m.id ? 'active' : ''}" onclick="window.selectModel('${m.id}', '${m.provider}')">
-              <div>
-                <div style="font-weight:bold; color:#fff; margin-bottom:4px;">${m.name}</div>
-                <div style="font-size:12px; color:var(--muted);">${m.desc}</div>
-              </div>
-              <div>${window.selectedAIModel === m.id ? '<span style="color:var(--orange);">✓</span>' : ''}</div>
-            </div>
-          `).join("");
+          document.getElementById("premium-models-list").innerHTML = premiumModels.map(m => 
+    "<div class=\"model-card " + (window.selectedAIModel === m.id ? "active" : "") + "\" onclick=\"window.selectModel('" + m.id + "', '" + m.provider + "')\">" +
+      "<div>" +
+        "<div style=\"font-weight:bold; color:#fff; margin-bottom:4px;\">" + m.name + "</div>" +
+        "<div style=\"font-size:12px; color:var(--muted);\">" + m.desc + "</div>" +
+      "</div>" +
+      "<div>" + (window.selectedAIModel === m.id ? "<span style=\"color:var(--orange);\">✓</span>" : "") + "</div>" +
+    "</div>"
+  ).join("");
         };
         
         window.generateFix = async () => {
@@ -1481,18 +1481,12 @@ const views = {
             
             sections.forEach(s => {
                if(s.content) {
-                 html += `<div class="res-section">
-                    <h3>${s.title}</h3>
-                    <p>${s.content}</p>
-                 </div>`;
+                 html += "<div class=\"res-section\"><h3>" + s.title + "</h3><p>" + s.content + "</p></div>";
                }
             });
             
             if(r.code_changes) {
-               html += `<div class="res-section">
-                  <h3>Code Changes</h3>
-                  <div class="code-block">${r.code_changes.replace(/</g,"&lt;").replace(/>/g,"&gt;")}</div>
-               </div>`;
+               html += "<div class=\"res-section\"><h3>Code Changes</h3><div class=\"code-block\">" + r.code_changes.replace(/</g,"&lt;").replace(/>/g,"&gt;") + "</div></div>";
             }
             
             if(!html) html = "<div class='code-block'>" + (data.raw || JSON.stringify(data, null, 2)) + "</div>";
@@ -1503,9 +1497,7 @@ const views = {
             clearInterval(intv);
             document.getElementById("view-loading").style.display = "none";
             document.getElementById("view-result").style.display = "block";
-            document.getElementById("result-content").innerHTML = `<div style="color:var(--red); padding:24px; border:1px solid var(--red); background:rgba(255,0,0,0.1); border-radius:8px;">
-               <b>Generation Failed</b><br><br>${e.message}
-            </div>`;
+            document.getElementById("result-content").innerHTML = "<div style=\"color:var(--red); padding:24px; border:1px solid var(--red); background:rgba(255,0,0,0.1); border-radius:8px;\"><b>Generation Failed</b><br><br>" + e.message + "</div>";
           }
         };
       `;
