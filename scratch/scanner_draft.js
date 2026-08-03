@@ -69,7 +69,7 @@ export async function runScan(scanId, repoUrl, deployUrl) {
     await supabase.from('scans').update({ status: 'running' }).eq('id', scanId);
     
     // 1. Repository Init
-    await logTerminal(`? Cloning Repository from ${repoUrl}...`, 5);
+    await logTerminal(`Cloning Repository from ${repoUrl}...`, 5);
     await execAsync(`git clone --depth 1 ${repoUrl} ${tmpDir}`);
     
     const packageJsonPath = path.join(tmpDir, 'package.json');
@@ -85,24 +85,24 @@ export async function runScan(scanId, repoUrl, deployUrl) {
         lang = 'Python';
     }
     
-    await logTerminal(`? Detected ${lang} / ${framework}`, 10);
+    await logTerminal(`Detected ${lang} / ${framework}`, 10);
     
     // 2. Start Application
     if (!targetUrl) {
-        await logTerminal(`? No deploy URL provided. Attempting to start locally...`, 15);
+        await logTerminal(`No deploy URL provided. Attempting to start locally...`, 15);
         localServer = await startLocalServer(tmpDir);
         if (localServer) {
             targetUrl = localServer.url;
-            await logTerminal(`? App running at ${targetUrl}`, 25);
+            await logTerminal(`App running at ${targetUrl}`, 25);
         } else {
             throw new Error("Could not start local server. Please provide a Deploy URL.");
         }
     } else {
-        await logTerminal(`? Using provided Deploy URL: ${targetUrl}`, 25);
+        await logTerminal(`Using provided Deploy URL: ${targetUrl}`, 25);
     }
     
     // 3. Playwright Crawler
-    await logTerminal(`? Launching Playwright Crawler...`, 30);
+    await logTerminal(`Launching Playwright Crawler...`, 30);
     const browser = await chromium.launch({ headless: true });
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
     const page = await context.newPage();
@@ -136,7 +136,7 @@ export async function runScan(scanId, repoUrl, deployUrl) {
         if (visited.has(url)) continue;
         visited.add(url);
         
-        await logTerminal(`? Crawling ${url}...`, progress += 5);
+        await logTerminal(`Crawling ${url}...`, progress += 5);
         
         let status = 200;
         let loadTime = 0;
@@ -196,7 +196,7 @@ export async function runScan(scanId, repoUrl, deployUrl) {
     }
 
     // AI Fix Plans
-    await logTerminal(`? Generating AI RCA and Fix Plans...`, 80);
+    await logTerminal(`Generating AI RCA and Fix Plans...`, 80);
     const aiFixPlans = [];
     if (issues.length > 0) {
         // We simulate the Gemini AI call if we don't have a real key, otherwise call it
@@ -226,7 +226,7 @@ export async function runScan(scanId, repoUrl, deployUrl) {
     }
     
     // 29. Saving Everything to Supabase
-    await logTerminal(`? Saving Everything to Supabase...`, 90);
+    await logTerminal(`Saving Everything to Supabase...`, 90);
     
     const journeyMapId = randomUUID();
     await supabase.from('journey_maps').insert([{ id: journeyMapId, scan_id: scanId, name: 'Primary Discovery Flow' }]);
@@ -251,12 +251,12 @@ export async function runScan(scanId, repoUrl, deployUrl) {
       error_message: null 
     }).eq('id', scanId);
     
-    await logTerminal(`? Scan Complete`, 100);
+    await logTerminal(`Scan Complete`, 100);
 
   } catch (error) {
     console.error("Scan Error:", error);
     await supabase.from('scans').update({ status: 'failed', error_message: error.message }).eq('id', scanId);
-    await logTerminal(`? Error: ${error.message}`, 100, true);
+    await logTerminal(`Error: ${error.message}`, 100, true);
   } finally {
      if (localServer && localServer.process) localServer.process.kill();
      try { await fs.remove(tmpDir); } catch(e) {}

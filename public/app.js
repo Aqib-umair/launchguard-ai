@@ -153,7 +153,7 @@ const components = {
     </div>`;
   },
   shell: (title, active, body) => {
-    const name = currentUser ? currentUser.name : 'Developer';
+    const name = currentUser ? (currentUser.username || currentUser.email) : 'Developer';
     const initial = name.charAt(0).toUpperCase();
     return `<div class="app">
       <aside class="sidebar">
@@ -211,9 +211,6 @@ const actions = {
   login: async (e, isRegister) => {
     e.preventDefault();
     const form = e.target;
-    const submitBtn = form.querySelector('button[type="submit"]');
-
-    const name    = form.name    ? form.name.value.trim()    : '';
     const email   = form.email   ? form.email.value.trim()   : '';
     const password= form.password? form.password.value.trim(): '';
     const username= form.username? form.username.value.trim(): '';
@@ -226,18 +223,17 @@ const actions = {
       alert('Enter password');
       return;
     }
-    if (isRegister && !name) {
-      alert('Enter full name');
+    if (isRegister && !username) {
+      alert('Enter username');
       return;
     }
 
     // Pure localStorage auth — no backend, no API, no database
     localStorage.setItem('loggedIn', 'true');
     localStorage.setItem('userEmail', email);
-    if (name) localStorage.setItem('userName', name);
     if (username) localStorage.setItem('userUsername', username);
 
-    currentUser = { email, name: name || email, username };
+    currentUser = { email, username };
     store.setJSON('user', currentUser);
 
     location.hash = 'dashboard';
@@ -622,10 +618,6 @@ const views = {
           <form class="auth-form" onsubmit="actions.login(event, ${isRegister})">
             ${isRegister ? `
               <div class="auth-field">
-                <label>Full Name</label>
-                <input name="name" type="text" placeholder="Jane Doe" required>
-              </div>
-              <div class="auth-field">
                 <label>Username</label>
                 <input name="username" type="text" placeholder="janedoe" required>
               </div>
@@ -649,7 +641,7 @@ const views = {
   
   dashboard: async () => { console.log("renderDashboard()");
     const data = await api.get('/api/dashboard');
-    const greeting = `Hi, ${currentUser ? currentUser.name : 'Developer'} 👋`;
+    const greeting = `Hi, ${currentUser && currentUser.username ? currentUser.username : (currentUser ? currentUser.email : 'Developer')} 👋`;
     
     let body = components.head('Workspace overview', greeting, 'Welcome back to LaunchGuard AI.', components.btn('+ New scan', 'setup', 'primary'));
     body += components.progressTracker('report');
@@ -1028,10 +1020,12 @@ const views = {
             else if(data.status === 'yellow') tag.innerHTML = '<span class="tag warn">WARNINGS FOUND</span>';
             else tag.innerHTML = '<span class="tag danger">CRITICAL FAILURE</span>';
             
-            // Mock AI Narrative
-            let aiText = "The page rendered successfully with no major interruptions to the user journey.";
-            if(data.status === 'red') aiText = "The agent detected a fatal error during rendering. This is actively blocking users from progressing. A patch is available.";
-            else if(data.status === 'yellow') aiText = "The page loaded, but the agent flagged performance warnings and non-fatal console errors. Monitor closely.";
+            // Real AI Narrative if available, else fallback
+            let aiText = data.ai_narrative || "The page rendered successfully with no major interruptions to the user journey.";
+            if(!data.ai_narrative) {
+              if(data.status === 'red') aiText = "The agent detected a fatal error during rendering. This is actively blocking users from progressing. A patch is available.";
+              else if(data.status === 'yellow') aiText = "The page loaded, but the agent flagged performance warnings and non-fatal console errors. Monitor closely.";
+            }
             document.getElementById('np-ai-desc').innerText = aiText;
             
             document.getElementById('np-img').src = data.screenshot || '';
