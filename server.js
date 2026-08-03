@@ -64,20 +64,79 @@ app.get('/api/reports/:scanId', asyncHandler(async (req, res) => {
 app.get('/api/repo/preview', asyncHandler(async (req, res) => {
   const { url } = req.query;
   if (!url || !url.includes('github.com')) return res.status(400).json({ error: 'Valid GitHub URL required.' });
-  res.json({ title: 'Repository Ready', description: `LaunchGuard is ready to clone ${url}.`, primaryLanguage: 'Detected' });
+  
+  const repoId = url.replace('https://github.com/', '').replace(/\/$/, '');
+  let preview = {
+    repo: repoId,
+    name: repoId.split('/')[1] || repoId,
+    owner: repoId.split('/')[0] || 'Unknown',
+    description: '',
+    stars: 0,
+    forks: 0,
+    language: 'Unknown',
+    framework: 'Unknown',
+    packageManager: 'NPM',
+    database: 'Unknown',
+    deployment: 'Unknown',
+    estimatedPages: Math.floor(Math.random() * 20) + 5,
+    techStack: 'Node.js, Express'
+  };
+  
+  try {
+    const ghRes = await fetch(`https://api.github.com/repos/${repoId}`);
+    if (ghRes.ok) {
+      const data = await ghRes.json();
+      preview.name = data.name || preview.name;
+      preview.description = data.description || '';
+      preview.stars = data.stargazers_count || 0;
+      preview.forks = data.forks_count || 0;
+      preview.owner = data.owner?.login || preview.owner;
+      preview.language = data.language || 'Unknown';
+    }
+  } catch (e) {
+    console.error('Preview fetch error:', e.message);
+  }
+  
+  res.json(preview);
 }));
 
 app.post('/api/scans/start', asyncHandler(async (req, res) => {
   console.log('ENDPOINT HIT: /api/scans/start', req.body);
   const { name, repoUrl, deployUrl, user_id } = req.body;
-  const repoId = repoUrl ? repoUrl.replace('https://github.com/', '') : `repo-${randomUUID().split('-')[0]}`;
+  const repoId = repoUrl ? repoUrl.replace('https://github.com/', '').replace(/\/$/, '') : `repo-${randomUUID().split('-')[0]}`;
   
-  // Fetch GitHub Metadata
-  let ghName = repoUrl || 'Local Test';
+  const repositoryObject = { 
+    id: repoId, 
+    user_email: user_id || 'test@example.com',
+    name: repoUrl || 'Local Test', 
+    owner: '',
+    url: repoUrl || 'http://localhost', 
+    framework: 'Unknown',
+    language: 'Unknown',
+    architecture: 'Unknown',
+    readme_summary: '',
+    tech_stack: '',
+    estimated_pages: 0,
+    stars: 0,
+    forks: 0,
+    description: ''
+  };
+  
+  console.log("INSERT PAYLOAD", repositoryObject);
+  const { error: repoErr } = await supabase.from('repositories').upsert([repositoryObject]);
+  console.log(repoErr);
+  
+  if (repoErr) {
+    return res.status(500).json(repoErr);
+  }
+
+  // Fetch GitHub Metadata after successful insert
+  let ghName = repositoryObject.name;
   let ghOwner = '';
   let ghLanguage = '';
   let ghStars = 0;
   let ghDescription = '';
+  let ghForks = 0;
   
   if (repoUrl && repoUrl.includes('github.com')) {
     try {
@@ -89,29 +148,23 @@ app.post('/api/scans/start', asyncHandler(async (req, res) => {
         ghLanguage = ghData.language || '';
         ghStars = ghData.stargazers_count || 0;
         ghDescription = ghData.description || '';
+        ghForks = ghData.forks_count || 0;
+        
+        // Update repository record
+        const { error: updateErr } = await supabase.from('repositories').update({
+          name: ghName,
+          owner: ghOwner,
+          language: ghLanguage,
+          stars: ghStars,
+          description: ghDescription,
+          forks: ghForks
+        }).eq('id', repoId);
+        
+        if (updateErr) console.error('Failed to update repo metadata:', updateErr);
       }
     } catch (e) {
       console.error('GitHub API Fetch failed:', e.message);
     }
-  }
-
-  const payload = { 
-    id: repoId, 
-    name: ghName, 
-    url: repoUrl || 'http://localhost', 
-    user_email: user_id || 'test@example.com',
-    owner: ghOwner,
-    language: ghLanguage,
-    stars: ghStars,
-    description: ghDescription
-  };
-  
-  console.log('PAYLOAD:', payload);
-  const { error: repoErr } = await supabase.from('repositories').upsert([payload]);
-  
-  if (repoErr) {
-    console.error('SQL ERROR [UPSERT repositories]:', JSON.stringify(repoErr, null, 2));
-    return res.status(500).json({ error: 'Failed to create repository record', sqlError: repoErr });
   }
 
   const id = `SCAN-LG-2026-${randomUUID().split('-')[0].toUpperCase()}`;
@@ -119,8 +172,7 @@ app.post('/api/scans/start', asyncHandler(async (req, res) => {
   const { error: scanErr } = await supabase.from('scans').insert([{ id, repository_id: repoId, name: scanName, deploy_url: deployUrl || '', status: 'queued' }]);
   
   if (scanErr) {
-    console.error('SQL ERROR [INSERT scans]:', JSON.stringify(scanErr, null, 2));
-    return res.status(500).json({ error: 'Failed to create scan record', sqlError: scanErr });
+    return res.status(500).json(scanErr);
   }
   
   // Start Scanner Asynchronously
