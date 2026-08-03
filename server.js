@@ -88,71 +88,111 @@ app.get('/api/config', (req, res) => {
 
 // ── Signup ────────────────────────────────────────────────────
 app.post('/api/auth/signup', asyncHandler(async (req, res) => {
-  const { email, password, fullName, name } = req.body;
+  const { email, password, fullName, name, username, github_username } = req.body;
   const finalName = fullName || name || '';
-  if (!supabase) throw new Error('Supabase not initialized');
+  const finalUsername = username || github_username || '';
+
+  console.log(`[AUTH] Signup attempt for email: ${email}`);
+
+  if (!supabase) {
+    console.error('[AUTH] Supabase not initialized');
+    return res.status(500).json({ success: false, error: 'Supabase not initialized' });
+  }
 
   if (!email || !password || !finalName) {
+    console.log('[AUTH] Missing required fields');
     return res.status(400).json({ success: false, error: 'Missing required fields' });
   }
 
-  const { data: authData, error: authError } = await supabase.auth.signUp({
-    email,
-    password,
-    options: { data: { full_name: finalName } }
-  });
+  try {
+    // Check if email already exists
+    const { data: existingUser, error: checkError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', email)
+      .maybeSingle();
 
-  if (authError) {
-    return res.status(400).json({ success: false, error: authError.message });
-  }
+    if (checkError) {
+      console.error('[AUTH] DB Check Error:', checkError);
+      return res.status(500).json({ success: false, error: checkError.message });
+    }
 
-  if (authData && authData.user) {
-    const { error: dbError } = await supabase
+    if (existingUser) {
+      console.log('[AUTH] Email already exists');
+      return res.status(400).json({ success: false, error: 'User already exists' });
+    }
+
+    // Insert new user
+    const { data: newUser, error: dbError } = await supabase
       .from('users')
       .insert([
         {
-          id: authData.user.id,
           name: finalName,
-          email: email
+          username: finalUsername,
+          email: email,
+          password: password // Storing plaintext as explicitly requested for "simple auth"
         }
-      ]);
+      ])
+      .select('id, name, username, email, created_at')
+      .single();
     
     if (dbError) {
       console.error('[AUTH] DB Insert Error:', dbError);
+      return res.status(500).json({ success: false, error: dbError.message });
     }
-  }
 
-  res.json({ success: true, message: 'Signup successful' });
+    console.log(`[AUTH] Signup successful for: ${email}`);
+    res.json({ success: true, message: 'Signup successful', user: newUser });
+  } catch (err) {
+    console.error('[AUTH] Unexpected Signup Error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
 }));
 
 // ── Login ─────────────────────────────────────────────────────
 app.post('/api/auth/login', asyncHandler(async (req, res) => {
   const { email, password } = req.body;
-  if (!supabase) throw new Error('Supabase not initialized');
+  
+  console.log(`[AUTH] Login attempt for email: ${email}`);
 
-  const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({ 
-    email, 
-    password 
-  });
-
-  if (signInError) {
-    return res.status(401).json({ success: false, error: 'Invalid email or password' });
+  if (!supabase) {
+    console.error('[AUTH] Supabase not initialized');
+    return res.status(500).json({ success: false, error: 'Supabase not initialized' });
   }
 
-  res.json({
-    success: true,
-    user: signInData.user,
-    session: signInData.session
-  });
+  try {
+    const { data: user, error: dbError } = await supabase
+      .from('users')
+      .select('id, name, username, email, created_at')
+      .eq('email', email)
+      .eq('password', password)
+      .maybeSingle();
+
+    if (dbError) {
+      console.error('[AUTH] DB Query Error:', dbError);
+      return res.status(500).json({ success: false, error: dbError.message });
+    }
+
+    if (!user) {
+      console.log('[AUTH] Invalid email or password');
+      return res.status(401).json({ success: false, error: 'Invalid email or password' });
+    }
+
+    console.log(`[AUTH] Login successful for: ${email}`);
+    res.json({
+      success: true,
+      user: user
+    });
+  } catch (err) {
+    console.error('[AUTH] Unexpected Login Error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
 }));
 
 // ── Logout ────────────────────────────────────────────────────
 app.post('/api/auth/logout', asyncHandler(async (req, res) => {
-  if (!supabase) throw new Error('Supabase not initialized');
-  const { error } = await supabase.auth.signOut();
-  if (error) {
-    return res.status(400).json({ success: false, error: error.message });
-  }
+  console.log('[AUTH] Logout attempt');
+  // No sessions to manage in purely custom table auth without tokens
   res.json({ success: true, message: 'Logout successful' });
 }));
 
