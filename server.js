@@ -127,6 +127,32 @@ app.post('/api/scans/start', asyncHandler(async (req, res) => {
   console.log("SUPABASE_ANON_KEY", process.env.SUPABASE_ANON_KEY ? 'Loaded' : 'Missing');
   console.log("OPENROUTER_API_KEY", process.env.OPENROUTER_API_KEY ? 'Loaded' : 'Missing');
 
+  console.log("Calling OpenRouter...");
+  try {
+    const orRes = await fetch('https://openrouter.ai/api/v1/auth/key', {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}` }
+    });
+    if (!orRes.ok) {
+      let orBody;
+      try { orBody = await orRes.json(); } catch(e) { orBody = await orRes.text(); }
+      console.error('OpenRouter key test failed:', orRes.status, orBody);
+      return res.status(orRes.status).json({
+        provider: 'OpenRouter',
+        status: 'error',
+        http_status: orRes.status,
+        details: orBody
+      });
+    }
+  } catch (e) {
+    console.error('OpenRouter fetch crashed:', e.message);
+    return res.status(500).json({
+      provider: 'OpenRouter',
+      status: 'error',
+      message: e.message
+    });
+  }
+
   console.log("INSERT PAYLOAD", repositoryObject);
   console.log("Calling Supabase...");
   const { error: repoErr } = await supabase.from('repositories').upsert([repositoryObject]);
