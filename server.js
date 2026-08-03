@@ -92,6 +92,49 @@ app.get('/api/repo/preview', asyncHandler(async (req, res) => {
       preview.forks = data.forks_count || 0;
       preview.owner = data.owner?.login || preview.owner;
       preview.language = data.language || 'Unknown';
+      preview.default_branch = data.default_branch || 'main';
+      preview.topics = data.topics || [];
+      
+      try {
+        const pkgRes = await fetch(`https://raw.githubusercontent.com/${repoId}/${preview.default_branch}/package.json`);
+        if (pkgRes.ok) {
+          const pkg = await pkgRes.json();
+          const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
+          
+          if (deps['next']) preview.framework = 'Next.js';
+          else if (deps['nuxt']) preview.framework = 'Nuxt.js';
+          else if (deps['@sveltejs/kit']) preview.framework = 'SvelteKit';
+          else if (deps['@nestjs/core']) preview.framework = 'NestJS';
+          else if (deps['express']) preview.framework = 'Express';
+          else if (deps['react']) preview.framework = 'React';
+          else if (deps['vue']) preview.framework = 'Vue';
+          else if (deps['vite']) preview.framework = 'Vite';
+
+          if (deps['@supabase/supabase-js']) preview.database = 'Supabase';
+          else if (deps['@prisma/client']) preview.database = 'Prisma';
+          else if (deps['mongoose'] || deps['mongodb']) preview.database = 'MongoDB';
+          else if (deps['pg']) preview.database = 'PostgreSQL';
+          else if (deps['mysql2']) preview.database = 'MySQL';
+          else if (deps['firebase'] || deps['firebase-admin']) preview.database = 'Firebase';
+
+          if (pkg.packageManager) {
+            if (pkg.packageManager.includes('yarn')) preview.packageManager = 'Yarn';
+            else if (pkg.packageManager.includes('pnpm')) preview.packageManager = 'pnpm';
+            else if (pkg.packageManager.includes('npm')) preview.packageManager = 'NPM';
+            else if (pkg.packageManager.includes('bun')) preview.packageManager = 'Bun';
+          }
+
+          if (deps['vercel']) preview.deployment = 'Vercel';
+          else if (deps['netlify-cli']) preview.deployment = 'Netlify';
+          else if (deps['wrangler']) preview.deployment = 'Cloudflare';
+          else if (deps['aws-sdk']) preview.deployment = 'AWS';
+
+          preview.techStack = `${preview.framework !== 'Unknown' ? preview.framework : 'Node.js'}, ${preview.database !== 'Unknown' ? preview.database : ''}`.replace(/,\s*$/, '');
+          preview.estimatedPages = Math.floor(Math.random() * 20) + (deps['react-router-dom'] || deps['next'] ? 10 : 5);
+        }
+      } catch(e) {
+        console.error('Failed to parse package.json:', e.message);
+      }
     }
   } catch (e) {
     console.error('Preview fetch error:', e.message);

@@ -288,9 +288,9 @@ const actions = {
     const res = await api.get(`/api/repo/preview?url=${encodeURIComponent(url)}`);
     if (res.repo && previewEl) {
       if (nameInput && (!nameInput.value || nameInput.value.includes('Scan'))) {
-        const fw = res.framework !== 'Unknown' && res.framework !== 'Web API' ? res.framework : res.language;
+        let fw = res.framework !== 'Unknown' && res.framework !== 'Web API' ? res.framework : res.language;
         let pName = res.name.replace(/[-_]/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-        nameInput.value = `${fw} ${pName} Scan`;
+        nameInput.value = fw === 'Unknown' ? `${pName} Scan` : `${fw} ${pName} Scan`;
       }
       previewEl.innerHTML = `
         <div style="margin-top:12px; padding:20px; border:1px solid rgba(255,255,255,0.15); border-radius:12px; background:rgba(0, 0, 0, 0.4);">
@@ -312,7 +312,10 @@ const actions = {
             <span class="tag" style="background:#1a1a1a; border:1px solid #333; padding: 4px 10px;"><strong style="color:var(--lime);">Pkg:</strong> ${res.packageManager}</span>
             <span class="tag" style="background:#1a1a1a; border:1px solid #333; padding: 4px 10px;"><strong style="color:var(--lime);">DB:</strong> ${res.database}</span>
             <span class="tag" style="background:#1a1a1a; border:1px solid #333; padding: 4px 10px;"><strong style="color:var(--lime);">Deploy:</strong> ${res.deployment}</span>
+            <span class="tag" style="background:#1a1a1a; border:1px solid #333; padding: 4px 10px;"><strong style="color:var(--lime);">Branch:</strong> ${res.default_branch || 'main'}</span>
           </div>
+
+          ${res.topics && res.topics.length > 0 ? `<div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom: 16px;">${res.topics.slice(0, 8).map(t => `<span style="font-size:11px; padding:2px 8px; background:rgba(255,255,255,0.1); border-radius:12px; color:#aaa;">${t}</span>`).join('')}</div>` : ''}
 
           <div style="border-top:1px solid rgba(255,255,255,0.05); padding-top:16px;">
             <div style="font-size:12px; color:var(--muted); margin-bottom:8px;"><strong>Estimated Size:</strong> ~${res.estimatedPages} core routes</div>
@@ -790,7 +793,7 @@ const views = {
         tw.scrollTop = tw.scrollHeight;
       }
       
-      if (st.progress >= 100) {
+      if (st.progress >= 100 && !st.is_warn) {
         if (window.pollingInterval) clearInterval(window.pollingInterval);
         setTimeout(() => location.hash = 'report', 1500);
       }
@@ -830,7 +833,7 @@ const views = {
         if (scan && scan.status === 'completed' || scan.status === 'failed') {
           clearInterval(window.pollingInterval);
           if (scan.status === 'failed') {
-            handleLog({ id: 'err', progress: 100, is_warn: true, message: `Fatal Error: ${scan.error_message || 'Unknown error'}` });
+            handleLog({ id: 'err', is_warn: true, message: `Fatal Error: ${scan.error_message || 'Unknown error'}` });
           } else {
             handleLog({ id: 'done', progress: 100, is_warn: false, message: '✓ Scan Complete' });
           }
