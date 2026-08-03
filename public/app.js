@@ -9,9 +9,19 @@ window.onunhandledrejection = function(e) {
   if(document.body) document.body.innerHTML += '<div style="padding:40px;font-family:sans-serif;background:rgba(255,0,0,0.9);color:white;position:fixed;top:0;left:0;z-index:9999;width:100%;height:100%;"><h1>Frontend Crash (onunhandledrejection)</h1><pre>' + (e.reason ? e.reason.stack : e.reason) + '</pre></div>';
 };
 
-console.log('app.js loaded');
-document.addEventListener('DOMContentLoaded', () => { console.log('DOMContentLoaded'); });
+let supabaseClient = null;
 
+console.log('app.js loaded');
+document.addEventListener('DOMContentLoaded', async () => { 
+  console.log('DOMContentLoaded'); 
+  try {
+    const config = await fetch('/api/config').then(r => r.json());
+    if (config.supabaseUrl && config.supabaseAnonKey && window.supabase) {
+      supabaseClient = window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey);
+      console.log('Supabase client initialized via /api/config');
+    }
+  } catch(e) { console.error('Failed to load supabase config', e); }
+});
 const api = {
   get: async (path) => { 
     try { 
@@ -255,7 +265,7 @@ const actions = {
     const repoUrl = form.repoUrl.value.trim();
     const deployUrl = form.deployUrl.value.trim();
     
-    const res = await api.post('/api/scans', { name, repoUrl, deployUrl });
+    const res = await api.post('/api/scans/start', { name, repoUrl, deployUrl });
     if (!res.id) {
       alert(res.error || "Failed to start scan. Please check server logs.");
       submitBtn.innerText = "Start Scan →";

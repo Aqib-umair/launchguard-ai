@@ -62,6 +62,7 @@ async function getLatestScanId() {
 // ══════════════════════════════════════════════════════════════
 
 // ── Health check ───────────────────────────────────────────────
+app.get('/api/config', (req, res) => res.json({ supabaseUrl: process.env.SUPABASE_URL, supabaseAnonKey: process.env.SUPABASE_ANON_KEY }));
 app.get('/api/health', asyncHandler(async (req, res) => {
   if (!supabaseAdmin) {
     return res.json({ success: false, database: "disconnected", error: "Supabase client not initialized" });
@@ -164,7 +165,7 @@ app.get('/api/repo/preview', asyncHandler(async (req, res) => {
 }));
 
 // ── Create scan (Playwright runs server-side, lazy import) ─────
-app.post('/api/scans', asyncHandler(async (req, res) => {
+app.post('/api/scans/start', asyncHandler(async (req, res) => {
   if (!supabase) return res.status(500).json({ error: 'Supabase not initialized.' });
   const { name, repoUrl, deployUrl, user_id } = req.body;
   const repoId = repoUrl ? repoUrl.replace('https://github.com/', '') : `repo-${randomUUID().split('-')[0]}`;

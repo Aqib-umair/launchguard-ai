@@ -14,7 +14,7 @@ async function runE2ETest(apiKey) {
   console.log('1. Starting scan on', repoUrl);
   
   // Create scan
-  let res = await fetch('http://localhost:3000/api/scans', {
+  let res = await fetch('http://localhost:3000/api/scans/start', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name: 'Express Test', repoUrl, deployUrl: '' })
