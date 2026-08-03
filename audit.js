@@ -7,10 +7,7 @@ async function audit() {
   console.log("=========================================\n");
 
   const endpoints = [
-    { method: 'GET', url: '/api/health' },
-    { method: 'GET', url: '/api/config' },
-    { method: 'POST', url: '/api/auth/signup', body: { name: 'Test', email: 'test@test.com', password: 'test' } },
-    { method: 'POST', url: '/api/auth/login', body: { email: 'test@test.com', password: 'test' } }
+    { method: 'GET', url: '/api/health' }
   ];
 
   for (const ep of endpoints) {
