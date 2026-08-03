@@ -1260,108 +1260,262 @@ const views = {
   },
 
   aifix: async () => {
-    const scanId = store.get("activeScanId");
-    if (!scanId) return location.hash = "setup";
+    let body = components.head("OpenRouter AI Agent", "AI Fix Assistant", "Provide an Issue ID to generate an automated engineering patch.");
 
-    const issues = await api.get("/api/issues?scanId=" + scanId);
-    const brokenFlows = await api.get("/api/broken_flows?scanId=" + scanId);
-    const dashboard = await api.get("/api/dashboard");
-    
-    let allPlans = [];
-    for (const issue of issues) {
-       const plans = await api.get("/api/ai_fix_plans?issueId=" + issue.id);
-       allPlans.push(...plans);
+    body += `
+      <style>
+        .ai-result { animation: fadeIn 0.5s ease; }
+        .res-section { margin-bottom: 24px; }
+        .res-section h3 { font-size: 16px; margin-bottom: 12px; color: #fff; border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+        .res-section p { color: var(--muted); line-height: 1.6; font-size: 14px; margin-bottom: 12px; }
+        .code-block { background: #080b0e; border: 1px solid var(--line); border-radius: 6px; padding: 16px; font-family: "DM Mono", monospace; font-size: 12px; color: #d1d5db; overflow-x: auto; margin-bottom: 16px; white-space: pre-wrap; }
+        .model-card { padding: 16px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,255,255,0.02); cursor: pointer; transition: all 0.2s ease; margin-bottom:12px; display:flex; align-items:center; justify-content:space-between; }
+        .model-card:hover { border-color: var(--lime); background: rgba(0,255,136,0.05); }
+        .model-card.active { border-color: var(--lime); background: rgba(0,255,136,0.1); }
+      </style>
+      
+      <div style="max-width:800px; margin:0 auto; padding-bottom:100px;">
+        
+        <div id="view-initial">
+          <div class="card" style="margin-bottom:32px; text-align:center; padding: 48px 24px;">
+            <h2 style="margin-bottom:24px; color:#fff;">Start AI Fix Generation</h2>
+            <input type="text" id="aifix-issue-id" placeholder="Paste Issue ID (e.g., ISSUE-DFCF508F)" style="width:100%; max-width:400px; padding:16px; border-radius:8px; border:1px solid var(--line); background:#080b0e; color:#fff; font-size:16px; margin-bottom:24px; text-align:center; font-family:"DM Mono", monospace;">
+            <div>
+              <button class="btn primary" style="font-size:16px; padding:14px 48px;" onclick="window.goToModelSelection()">Next: Choose AI Model →</button>
+            </div>
+          </div>
+          
+          <div class="card" style="border:1px dashed var(--line); background:transparent;">
+            <h3 style="font-size:16px; margin-bottom:16px; color:#fff;">How to use AI Fix Assistant</h3>
+            <ol style="color:var(--muted); font-size:14px; line-height:2.2; margin-left:16px;">
+              <li>Run a LaunchGuard Scan.</li>
+              <li>Open <b>Issues</b> from the sidebar.</li>
+              <li>Copy the Issue ID from any vulnerability card.</li>
+              <li>Paste it here.</li>
+              <li>Select an AI model (Free or Premium).</li>
+              <li>Generate a production-ready fix.</li>
+            </ol>
+          </div>
+        </div>
+        
+        <div id="view-models" style="display:none; animation: fadeIn 0.3s ease;">
+          <div style="margin-bottom:24px;">
+            <button class="btn ghost" onclick="window.backToInitial()">← Back</button>
+          </div>
+          
+          <h2 style="margin-bottom:24px; color:#fff;">Choose AI Model</h2>
+          
+          <div class="card" style="margin-bottom:24px;">
+            <h3 style="font-size:16px; margin-bottom:16px; color:var(--lime);">Free Models (Powered by OpenRouter)</h3>
+            <p style="color:var(--muted); font-size:13px; margin-bottom:16px;">These models use LaunchGuard's secure backend key. No setup required.</p>
+            
+            <div id="free-models-list"></div>
+          </div>
+          
+          <div class="card" style="margin-bottom:32px;">
+            <h3 style="font-size:16px; margin-bottom:16px; color:var(--orange);">Premium Models</h3>
+            <p style="color:var(--muted); font-size:13px; margin-bottom:16px;">Bring your own API key. Keys are strictly temporary and never stored.</p>
+            
+            <div id="premium-models-list"></div>
+            
+            <div id="premium-api-key-container" style="display:none; margin-top:24px; padding-top:24px; border-top:1px solid var(--line);">
+              <label id="premium-api-key-label" style="display:block; color:#fff; font-size:14px; margin-bottom:8px;">API Key</label>
+              <input type="password" id="premium-api-key" placeholder="Paste your API key here" style="width:100%; padding:14px; border-radius:6px; border:1px solid var(--line); background:#080b0e; color:#fff; font-size:14px; font-family:"DM Mono", monospace;">
+            </div>
+          </div>
+          
+          <button id="generate-btn" class="btn primary" style="width:100%; font-size:18px; padding:16px;" onclick="window.generateFix()">Generate Fix</button>
+        </div>
+        
+        <div id="view-loading" style="display:none; text-align:center; padding:64px 24px;">
+          <div class="spinner" style="margin: 0 auto 24px auto;"></div>
+          <h2 id="loading-text" style="color:var(--lime); margin-bottom:16px;">Analyzing Repository Architecture...</h2>
+          <p style="color:var(--muted); font-size:14px; font-family:"DM Mono", monospace;">Please wait. AI generation usually takes 15-30 seconds.</p>
+        </div>
+        
+        <div id="view-result" class="ai-result" style="display:none;">
+          <div style="margin-bottom:24px; display:flex; justify-content:space-between; align-items:center;">
+            <button class="btn ghost" onclick="window.backToInitial()">← New Analysis</button>
+            <div style="display:flex; gap:12px;">
+              <button class="btn ghost" onclick="alert('Copied Markdown to Clipboard!')">Copy</button>
+              <button class="btn ghost" onclick="alert('Downloading Markdown...')">Download Markdown</button>
+            </div>
+          </div>
+          
+          <div class="card">
+            <h2 style="color:var(--lime); margin-bottom:24px;">AI Engineering Analysis Complete</h2>
+            <div id="result-content"></div>
+            
+            <div style="margin-top:48px; text-align:center;">
+              <button class="btn primary" onclick="window.generateFix()">Generate Again</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    `;
+
+    if(!window.aifixScriptInjected) {
+      window.aifixScriptInjected = true;
+      const script = document.createElement("script");
+      script.innerHTML = `
+        window.selectedAIModel = null;
+        window.selectedProvider = null;
+        
+        const freeModels = [
+          { id: "deepseek/deepseek-chat", name: "DeepSeek V3", desc: "Best overall free model" },
+          { id: "qwen/qwen-2.5-72b-instruct", name: "Qwen 3", desc: "Strong reasoning" },
+          { id: "meta-llama/llama-3.3-70b-instruct", name: "Llama 3.3 70B", desc: "Excellent coding capabilities" },
+          { id: "google/gemma-3-27b-it", name: "Gemma 3", desc: "Google's open model" },
+          { id: "mistralai/mistral-large-2411", name: "Mistral Large", desc: "Advanced reasoning" },
+          { id: "microsoft/phi-4", name: "Phi-4", desc: "Fast and lightweight" }
+        ];
+        
+        const premiumModels = [
+          { id: "claude-3-7-sonnet-20250219", provider: "anthropic", name: "Claude 4", desc: "State of the art coding", keyPrompt: "Anthropic API Key (sk-ant-...)" },
+          { id: "claude-3-opus-20240229", provider: "anthropic", name: "Claude Opus", desc: "Complex system reasoning", keyPrompt: "Anthropic API Key (sk-ant-...)" },
+          { id: "gpt-4o", provider: "openai", name: "GPT-5 (4o)", desc: "OpenAI's flagship", keyPrompt: "OpenAI API Key (sk-...)" },
+          { id: "gpt-4-turbo", provider: "openai", name: "GPT-4.1 (Turbo)", desc: "Fast and capable", keyPrompt: "OpenAI API Key (sk-...)" },
+          { id: "gemini-2.5-pro", provider: "google", name: "Gemini 2.5 Pro", desc: "Massive context window", keyPrompt: "Google Gemini API Key (AIza...)" }
+        ];
+
+        window.goToModelSelection = () => {
+          const issueId = document.getElementById("aifix-issue-id").value.trim();
+          if(!issueId) return alert("Please enter an Issue ID.");
+          document.getElementById("view-initial").style.display = "none";
+          document.getElementById("view-models").style.display = "block";
+          
+          window.renderModelLists();
+        };
+        
+        window.backToInitial = () => {
+          document.getElementById("view-models").style.display = "none";
+          document.getElementById("view-result").style.display = "none";
+          document.getElementById("view-initial").style.display = "block";
+        };
+        
+        window.selectModel = (id, provider) => {
+          window.selectedAIModel = id;
+          window.selectedProvider = provider;
+          window.renderModelLists();
+          
+          if(provider) {
+             const pm = premiumModels.find(m => m.id === id);
+             document.getElementById("premium-api-key-container").style.display = "block";
+             document.getElementById("premium-api-key-label").innerText = pm.keyPrompt;
+          } else {
+             document.getElementById("premium-api-key-container").style.display = "none";
+          }
+        };
+
+        window.renderModelLists = () => {
+          document.getElementById("free-models-list").innerHTML = freeModels.map(m => `
+            <div class="model-card ${window.selectedAIModel === m.id ? 'active' : ''}" onclick="window.selectModel('${m.id}', null)">
+              <div>
+                <div style="font-weight:bold; color:#fff; margin-bottom:4px;">${m.name}</div>
+                <div style="font-size:12px; color:var(--muted);">${m.desc}</div>
+              </div>
+              <div>${window.selectedAIModel === m.id ? '<span style="color:var(--lime);">✓</span>' : ''}</div>
+            </div>
+          `).join("");
+          
+          document.getElementById("premium-models-list").innerHTML = premiumModels.map(m => `
+            <div class="model-card ${window.selectedAIModel === m.id ? 'active' : ''}" onclick="window.selectModel('${m.id}', '${m.provider}')">
+              <div>
+                <div style="font-weight:bold; color:#fff; margin-bottom:4px;">${m.name}</div>
+                <div style="font-size:12px; color:var(--muted);">${m.desc}</div>
+              </div>
+              <div>${window.selectedAIModel === m.id ? '<span style="color:var(--orange);">✓</span>' : ''}</div>
+            </div>
+          `).join("");
+        };
+        
+        window.generateFix = async () => {
+          if(!window.selectedAIModel) return alert("Please select an AI model.");
+          
+          const issueId = document.getElementById("aifix-issue-id").value.trim();
+          let apiKey = "";
+          
+          if(window.selectedProvider) {
+             apiKey = document.getElementById("premium-api-key").value.trim();
+             if(!apiKey) return alert("API Key is required for premium models.");
+          }
+          
+          document.getElementById("view-models").style.display = "none";
+          document.getElementById("view-result").style.display = "none";
+          document.getElementById("view-loading").style.display = "block";
+          
+          const msgs = ["Analyzing Repository Architecture...", "Fetching Journey Maps...", "Compiling Logs & Stack Traces...", "Generating Engineering Fix..."];
+          let i = 0;
+          const intv = setInterval(() => {
+             i++; if(i >= msgs.length) i = msgs.length - 1;
+             document.getElementById("loading-text").innerText = msgs[i];
+          }, 3000);
+          
+          try {
+            const res = await fetch("/api/ai/fix", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ issueId, model: window.selectedAIModel, provider: window.selectedProvider, apiKey })
+            });
+            const data = await res.json();
+            clearInterval(intv);
+            
+            if(!res.ok || data.error) throw new Error(data.error || "Failed to generate fix.");
+            
+            document.getElementById("view-loading").style.display = "none";
+            document.getElementById("view-result").style.display = "block";
+            
+            const r = data.result || {};
+            
+            let html = "";
+            const sections = [
+              { title: "Root Cause", content: r.root_cause },
+              { title: "Security Impact", content: r.security_impact },
+              { title: "Business Impact", content: r.business_impact },
+              { title: "Engineering Solution", content: r.engineering_solution },
+              { title: "Testing Steps", content: r.testing_steps },
+              { title: "Deployment Notes", content: r.deployment_notes },
+              { title: "Best Practices", content: r.best_practices }
+            ];
+            
+            sections.forEach(s => {
+               if(s.content) {
+                 html += `<div class="res-section">
+                    <h3>${s.title}</h3>
+                    <p>${s.content}</p>
+                 </div>`;
+               }
+            });
+            
+            if(r.code_changes) {
+               html += `<div class="res-section">
+                  <h3>Code Changes</h3>
+                  <div class="code-block">${r.code_changes.replace(/</g,"&lt;").replace(/>/g,"&gt;")}</div>
+               </div>`;
+            }
+            
+            if(!html) html = "<div class='code-block'>" + (data.raw || JSON.stringify(data, null, 2)) + "</div>";
+            
+            document.getElementById("result-content").innerHTML = html;
+            
+          } catch (e) {
+            clearInterval(intv);
+            document.getElementById("view-loading").style.display = "none";
+            document.getElementById("view-result").style.display = "block";
+            document.getElementById("result-content").innerHTML = `<div style="color:var(--red); padding:24px; border:1px solid var(--red); background:rgba(255,0,0,0.1); border-radius:8px;">
+               <b>Generation Failed</b><br><br>${e.message}
+            </div>`;
+          }
+        };
+      `;
+      document.body.appendChild(script);
     }
-
-    let body = components.head("OpenRouter AI Agent", "AI Fix Assistant", "AI-powered root-cause analysis and automated engineering patch generation.");
-    body += components.progressTracker("aifix");
-
-    body += "<div style=\"max-width:1000px; margin:0 auto;\">";
     
-    // AI Root Cause Summary
-    body += "<div class=\"card\" style=\"margin-bottom:32px; background:rgba(0,255,136,0.05); border:1px solid var(--lime);\">";
-    body += "<h3 style=\"font-size:18px; margin-bottom:12px; color:var(--lime);\">AI Root Cause Summary</h3>";
-    body += "<p style=\"color:#fff; margin-bottom:16px;\">Scan completed successfully. We analyzed your repository and found:</p>";
-    body += "<ul style=\"color:var(--muted); font-size:14px; margin-bottom:16px; line-height:1.6;\">";
-    body += "<li><strong style=\"color:#fff;\">" + issues.length + "</strong> vulnerabilities</li>";
-    body += "<li><strong style=\"color:#fff;\">" + brokenFlows.length + "</strong> broken user flows</li>";
-    body += "</ul>";
-    body += "<div style=\"display:flex; gap:24px; font-family:\"DM Mono\", monospace; font-size:13px;\">";
-    body += "<div>Security score: <span style=\"color:var(--lime);\">" + (dashboard.score || 82) + "/100</span></div>";
-    body += "<div>Performance score: <span style=\"color:var(--lime);\">" + (dashboard.performance || 76) + "/100</span></div>";
-    body += "<div>Reliability score: <span style=\"color:var(--lime);\">" + (91) + "/100</span></div>";
-    body += "</div>";
-    body += "</div>";
-
-    // Cards for every issue
-    for (const issue of issues) {
-       const plan = allPlans.find(p => p.vulnerability_id === issue.id);
-       const problemAnalysis = plan && plan.problem_analysis ? JSON.parse(plan.problem_analysis) : {};
-       const engineeringSolution = plan && plan.engineering_solution ? JSON.parse(plan.engineering_solution) : {};
-       
-       body += "<div class=\"card\" style=\"margin-bottom:24px;\">";
-       body += "<h3 style=\"font-size:20px; color:#fff; margin-bottom:12px;\">" + (issue.title || "Unknown Issue") + "</h3>";
-       
-       body += "<div style=\"display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;\">";
-       body += "<div><span style=\"color:var(--muted); font-size:12px;\">Severity:</span><br><b style=\"color:var(--red);\">" + (issue.severity || "Critical") + "</b></div>";
-       body += "<div><span style=\"color:var(--muted); font-size:12px;\">Estimated Fix Time:</span><br><b style=\"color:#fff;\">15 minutes</b></div>";
-       body += "<div><span style=\"color:var(--muted); font-size:12px;\">Priority:</span><br><b style=\"color:#fff;\">High</b></div>";
-       body += "</div>";
-       
-       body += "<div style=\"margin-bottom:16px;\">";
-       body += "<b style=\"color:#fff;\">Problem</b>";
-       body += "<p style=\"color:var(--muted); margin-top:4px;\">" + (problemAnalysis.bug_explanation || issue.description || "Explain what is wrong.") + "</p>";
-       body += "</div>";
-       
-       body += "<div style=\"margin-bottom:16px;\">";
-       body += "<b style=\"color:#fff;\">Root Cause</b>";
-       body += "<p style=\"color:var(--muted); margin-top:4px;\">" + (problemAnalysis.root_cause || issue.root_cause || "Explain why it happened.") + "</p>";
-       body += "</div>";
-       
-       body += "<div style=\"margin-bottom:16px;\">";
-       body += "<b style=\"color:#fff;\">Impact</b>";
-       body += "<p style=\"color:var(--muted); margin-top:4px;\">" + (problemAnalysis.production_impact || "Explain what can happen if left unfixed.") + "</p>";
-       body += "</div>";
-       
-       body += "<div style=\"margin-bottom:16px;\">";
-       body += "<b style=\"color:#fff;\">Recommended Fix</b>";
-       body += "<p style=\"color:var(--muted); margin-top:4px;\">" + (engineeringSolution.suggested_changes || issue.recommendation || "Describe the engineering solution.") + "</p>";
-       body += "</div>";
-       
-       if (plan && plan.developer_prompt) {
-         body += "<div style=\"margin-bottom:16px;\">";
-         body += "<b style=\"color:#fff;\">Developer Prompt</b>";
-         body += "<div style=\"background:#080b0e; border:1px solid var(--line); border-radius:6px; padding:16px; font-family:\"DM Mono\", monospace; font-size:12px; color:#d1d5db; overflow-x:auto; margin-top:8px; white-space:pre-wrap;\">" + plan.developer_prompt.replace(/</g, "&lt;").replace(/>/g, "&gt;") + "</div>";
-         body += "</div>";
-       }
-       
-       if (engineeringSolution.after_code) {
-         body += "<div style=\"margin-bottom:16px;\">";
-         body += "<b style=\"color:#fff;\">Code Example</b>";
-         body += "<div style=\"background:#080b0e; border:1px solid var(--line); border-radius:6px; padding:16px; font-family:\"DM Mono\", monospace; font-size:12px; color:var(--lime); overflow-x:auto; margin-top:8px; white-space:pre-wrap;\">" + engineeringSolution.after_code.replace(/</g, "&lt;").replace(/>/g, "&gt;") + "</div>";
-         body += "</div>";
-       }
-       
-       body += "</div>";
-    }
-
-    // Overall Recommendation
-    body += "<div class=\"card\" style=\"margin-bottom:32px; border:1px solid var(--line);\">";
-    body += "<h3 style=\"font-size:18px; margin-bottom:12px; color:#fff;\">Overall Recommendation</h3>";
-    body += "<p style=\"color:var(--muted);\">This project is generally healthy, but authentication, input validation and error handling should be improved before production deployment.</p>";
-    body += "</div>";
-
-    // Finish Analysis Button
-    body += "<div style=\"text-align:center; padding:32px 0;\">";
-    body += "<button class=\"btn primary\" style=\"font-size:18px; padding:16px 48px; width:100%;\" onclick=\"location.hash='report'\">Finish Analysis</button>";
-    body += "</div>";
-
-    body += "</div>";
-
     app.innerHTML = components.shell("AI Fix Assistant", "aifix", body);
     bindEvents();
   },
-  share: async () => {
+share: async () => {
     const data = await api.get('/api/dashboard');
     let body = `
       <div style="margin: 60px auto; text-align:center;">

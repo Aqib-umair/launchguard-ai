@@ -414,9 +414,123 @@ app.get('/api/ollama/ping', asyncHandler(async (req, res) => {
   }
 }));
 
-app.post('/api/ai/fix', async (req, res) => {
-  res.status(500).json({ error: 'AI Fix Endpoint Called' });
-});
+app.post("/api/ai/fix", asyncHandler(async (req, res) => {
+  const { issueId, model, provider, apiKey } = req.body;
+  if (!issueId || !model) return res.status(400).json({ error: "Missing issueId or model" });
+  
+  if (!supabase) return res.status(500).json({ error: "Supabase not connected. Cannot fetch issue data." });
+  
+  const { data: issue } = await supabase.from("vulnerabilities").select("*").eq("id", issueId).single();
+  if (!issue) return res.status(404).json({ error: "Issue not found" });
+  
+  const { data: scan } = await supabase.from("scans").select("*").eq("id", issue.scan_id).single();
+  const repoId = scan ? scan.repository_id : "";
+  let repo = null;
+  if (repoId) {
+    const { data: r } = await supabase.from("repositories").select("*").eq("id", repoId).single();
+    repo = r;
+  }
+  
+  const prompt = `You are a senior principal engineer analyzing a production issue.
+
+# Root Cause
+${issue.root_cause || "Unknown"}
+
+# Severity
+${issue.severity || "Unknown"}
+
+# Repository
+${repo ? `Name: ${repo.name}\nFramework: ${repo.framework}\nLanguage: ${repo.language}\nStack: ${repo.tech_stack}` : "Unknown"}
+
+# Affected Files
+${issue.affected_file || "Unknown"}
+
+# Description
+${issue.title}
+${issue.description || ""}
+
+# Suggested Engineering Fix
+${issue.recommendation || ""}
+
+Please analyze this data and return your response EXACTLY in this JSON structure:
+{
+  "root_cause": "Detailed explanation of why it happened",
+  "security_impact": "Impact on security",
+  "business_impact": "Impact on business operations",
+  "engineering_solution": "Detailed explanation of the fix",
+  "code_changes": "Code snippet or diff",
+  "testing_steps": "How to verify the fix",
+  "deployment_notes": "Deployment precautions",
+  "best_practices": "How to prevent this in the future"
+}`;
+
+  let apiUrl = "";
+  let headers = { "Content-Type": "application/json" };
+  let body = {};
+  
+  if (!provider) {
+    apiUrl = "https://openrouter.ai/api/v1/chat/completions";
+    headers["Authorization"] = `Bearer ${process.env.OPENROUTER_API_KEY}`;
+    body = {
+      model: model,
+      response_format: { type: "json_object" },
+      messages: [{ role: "user", content: prompt }]
+    };
+  } else if (provider === "openai") {
+    apiUrl = "https://api.openai.com/v1/chat/completions";
+    headers["Authorization"] = `Bearer ${apiKey}`;
+    body = {
+      model: model,
+      response_format: { type: "json_object" },
+      messages: [{ role: "user", content: prompt }]
+    };
+  } else if (provider === "anthropic") {
+    apiUrl = "https://api.anthropic.com/v1/messages";
+    headers["x-api-key"] = apiKey;
+    headers["anthropic-version"] = "2023-06-01";
+    body = {
+      model: model,
+      max_tokens: 4096,
+      messages: [{ role: "user", content: prompt + "\n\nPlease ensure your response is raw JSON." }]
+    };
+  } else if (provider === "google") {
+    apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    body = {
+      contents: [{ parts: [{ text: prompt }] }]
+    };
+  }
+  
+  try {
+    const aiRes = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify(body) });
+    if (!aiRes.ok) {
+      const errText = await aiRes.text();
+      return res.status(aiRes.status).json({ error: "AI API Error: " + errText });
+    }
+    
+    const aiData = await aiRes.json();
+    let resultText = "";
+    
+    if (provider === "anthropic") {
+      resultText = aiData.content[0].text;
+    } else if (provider === "google") {
+      resultText = aiData.candidates[0].content.parts[0].text;
+    } else {
+      resultText = aiData.choices[0].message.content;
+    }
+    
+    resultText = resultText.replace(/```json/g, "").replace(/```/g, "").trim();
+    let resultJson = {};
+    try {
+      resultJson = JSON.parse(resultText);
+    } catch (e) {
+      resultJson = { raw: resultText };
+    }
+    
+    res.json({ result: resultJson });
+  } catch (err) {
+    res.status(500).json({ error: "Request to AI Provider failed: " + err.message });
+  }
+}));
 
 app.use('/api', (req, res) => {
   res.status(404).json({ success: false, error: 'API endpoint not found: ' + req.originalUrl });
