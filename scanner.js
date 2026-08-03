@@ -18,7 +18,10 @@ async function insertDB(table, data) {
         return { data: null, error: null };
     }
     const { data: result, error } = await supabase.from(table).insert(data);
-    if (error) console.error(`SQL ERROR [INSERT ${table}]:`, error.message, error.details || '');
+    if (error) {
+        console.error(`SQL ERROR [INSERT ${table}]:`, error.message, error.details || '');
+        throw new Error(`Database Insert Failed: ${table}`);
+    }
     return { data: result, error };
 }
 
@@ -28,7 +31,10 @@ async function updateDB(table, data, matchColumn, matchValue) {
         return { data: null, error: null };
     }
     const { data: result, error } = await supabase.from(table).update(data).eq(matchColumn, matchValue);
-    if (error) console.error(`SQL ERROR [UPDATE ${table}]:`, error.message, error.details || '');
+    if (error) {
+        console.error(`SQL ERROR [UPDATE ${table}]:`, error.message, error.details || '');
+        throw new Error(`Database Update Failed: ${table}`);
+    }
     return { data: result, error };
 }
 
