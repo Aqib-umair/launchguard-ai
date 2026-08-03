@@ -71,9 +71,19 @@ app.post('/api/scans/start', asyncHandler(async (req, res) => {
   console.log('ENDPOINT HIT: /api/scans/start', req.body);
   const { name, repoUrl, deployUrl, user_id } = req.body;
   const repoId = repoUrl ? repoUrl.replace('https://github.com/', '') : `repo-${randomUUID().split('-')[0]}`;
-  await supabase.from('repositories').upsert([{ id: repoId, name: repoUrl, url: repoUrl, user_id }]);
+  
+  const { error: repoErr } = await supabase.from('repositories').upsert([{ id: repoId, name: repoUrl || 'Local Test', url: repoUrl || 'http://localhost', user_email: user_id || 'test@example.com' }]);
+  if (repoErr) {
+    console.error('SQL ERROR [UPSERT repositories]:', repoErr);
+    return res.status(500).json({ error: 'Failed to create repository record' });
+  }
+
   const id = `SCAN-LG-2026-${randomUUID().split('-')[0].toUpperCase()}`;
-  await supabase.from('scans').insert([{ id, repository_id: repoId, name, deploy_url: deployUrl, status: 'queued' }]);
+  const { error: scanErr } = await supabase.from('scans').insert([{ id, repository_id: repoId, name: name || 'Test Scan', deploy_url: deployUrl || '', status: 'queued' }]);
+  if (scanErr) {
+    console.error('SQL ERROR [INSERT scans]:', scanErr);
+    return res.status(500).json({ error: 'Failed to create scan record' });
+  }
   
   import('./scanner.js').then(({ runScan }) => runScan(id, repoUrl, deployUrl, supabase)).catch(console.error);
   res.status(201).json({ id, name, status: 'queued' });
@@ -167,7 +177,10 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ success: false, error: err.message || 'Internal server error', stack: err.stack });
 });
 
-if (!process.env.VERCEL) {
+if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL_ENV) {
+  const port = process.env.PORT || 3000;
+  app.listen(port, () => console.log(`LaunchGuard AI running on http://localhost:${port}`));
+} else if (process.argv[1] && process.argv[1].endsWith('server.js')) {
   const port = process.env.PORT || 3000;
   app.listen(port, () => console.log(`LaunchGuard AI running on http://localhost:${port}`));
 }

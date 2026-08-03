@@ -195,8 +195,7 @@ export async function runScan(scanId, repoUrl, deployUrl, sbInstance) {
         let nodeStatus = 'green';
         if (status >= 400 || a11yScore < 70) nodeStatus = 'red';
         else if (perfScore < 80 || a11yScore < 90) nodeStatus = 'yellow';
-        
-        mockNodes.push({ scan_id: scanId, path: new URL(url).pathname, status_code: status, load_time: loadTime, perf_score: Math.round(perfScore), a11y_score: Math.round(a11yScore), status: nodeStatus });
+        mockNodes.push({ scan_id: scanId, path: new URL(url).pathname, status_code: status, load_time: loadTime, perf_score: Math.round(perfScore), a11y_score: Math.round(a11yScore) });
         
         // Find links
         if (status === 200) {
