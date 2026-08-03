@@ -200,107 +200,48 @@ const components = {
 const actions = {
   login: async (e, isRegister) => {
     e.preventDefault();
-    console.log('[DEBUG] Submit fired');
     const form = e.target;
     const submitBtn = form.querySelector('button[type="submit"]');
-    
-    if (submitBtn) {
-      submitBtn.disabled = true;
-      submitBtn.innerText = 'Authenticating...';
-    }
 
     const name    = form.name    ? form.name.value.trim()    : '';
     const email   = form.email   ? form.email.value.trim()   : '';
     const password= form.password? form.password.value.trim(): '';
     const username= form.username? form.username.value.trim(): '';
 
-    if (!email || !password) {
-      alert('Email and password are required.');
-      if (submitBtn) {
-        submitBtn.disabled = false;
-        submitBtn.innerText = isRegister ? 'Create Account' : 'Login';
-      }
+    if (!email) {
+      alert('Enter email');
+      return;
+    }
+    if (!password) {
+      alert('Enter password');
       return;
     }
     if (isRegister && !name) {
-      alert('Full name is required for signup.');
-      if (submitBtn) {
-        submitBtn.disabled = false;
-        submitBtn.innerText = 'Create Account';
-      }
+      alert('Enter full name');
       return;
     }
 
-    console.log('[DEBUG] Validation passed');
+    // Pure localStorage auth — no backend, no API, no database
+    localStorage.setItem('loggedIn', 'true');
+    localStorage.setItem('userEmail', email);
+    if (name) localStorage.setItem('userName', name);
+    if (username) localStorage.setItem('userUsername', username);
 
-    try {
-      let url = isRegister ? '/api/auth/signup' : '/api/auth/login';
-      let bodyData = isRegister ? { name, email, password, github_username: username } : { email, password };
-      
-      console.log('[DEBUG] Before fetch');
-      let res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(bodyData)
-      });
-      const text = await res.text();
-      const contentType = res.headers.get('content-type') || '';
-      console.log({
-        url: res.url,
-        redirected: res.redirected,
-        status: res.status,
-        contentType: contentType,
-        body: text.substring(0, 500)
-      });
-      
-      let data = {};
-      
-      if (contentType.includes('application/json')) {
-        data = JSON.parse(text);
-      } else {
-        console.error("Server returned HTML instead of JSON\n" + text);
-        alert(`Server returned HTML instead of JSON.\nStatus: ${res.status}\nURL: ${res.url}\nCheck console for details.`);
-        if (submitBtn) {
-          submitBtn.disabled = false;
-          submitBtn.innerText = isRegister ? 'Create Account' : 'Login';
-        }
-        return;
-      }
+    currentUser = { email, name: name || email, username };
+    store.setJSON('user', currentUser);
 
-      if (!res.ok || !data.success) {
-        const msg = data.error || 'Authentication failed. Please try again.';
-        alert(msg);
-        if (submitBtn) {
-          submitBtn.disabled = false;
-          submitBtn.innerText = isRegister ? 'Create Account' : 'Login';
-        }
-        return;
-      }
-
-      currentUser = data.user;
-      store.setJSON('user', currentUser);
-
-      if (data.session) {
-        store.setJSON('session', { access_token: data.session.access_token, refresh_token: data.session.refresh_token });
-      }
-
-      location.hash = 'dashboard';
-
-    } catch (err) {
-      alert('An unexpected error occurred: ' + err.message);
-      if (submitBtn) {
-        submitBtn.disabled = false;
-        submitBtn.innerText = isRegister ? 'Create Account' : 'Login';
-      }
-    }
+    location.hash = 'dashboard';
   },
   logout: () => {
     currentUser = null;
+    localStorage.removeItem('loggedIn');
+    localStorage.removeItem('userEmail');
+    localStorage.removeItem('userName');
+    localStorage.removeItem('userUsername');
     store.del('user');
     store.del('session');
     store.del('activeScanId');
     store.del('hasScanned');
-    console.log('[AUTH] Logged out. Redirecting to landing.');
     location.hash = 'landing';
   },
   startScan: async (e) => {
@@ -1706,13 +1647,20 @@ const router = async () => {
   let fullHash = location.hash.slice(1) || '';
   let viewName = fullHash.split('?')[0];
   
-  if (!currentUser && !['landing', 'login', 'register'].includes(viewName)) {
+  const isLoggedIn = localStorage.getItem('loggedIn') === 'true';
+  
+  if (!isLoggedIn && !['landing', 'login', 'register'].includes(viewName)) {
     location.hash = 'landing';
     return;
   }
-  if (currentUser && ['landing', 'login', 'register', ''].includes(viewName)) {
+  if (isLoggedIn && ['landing', 'login', 'register', ''].includes(viewName)) {
     location.hash = 'dashboard';
     return;
+  }
+  
+  // Restore currentUser from localStorage on page load
+  if (isLoggedIn && !currentUser) {
+    currentUser = store.getJSON('user') || { email: localStorage.getItem('userEmail') || '' };
   }
   
   if (viewName === '') viewName = 'landing';
