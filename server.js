@@ -88,20 +88,41 @@ app.get('/api/config', (req, res) => {
 
 // ── Signup ────────────────────────────────────────────────────
 app.post('/api/auth/signup', asyncHandler(async (req, res) => {
-  const { email, password, name, github_username } = req.body;
+  const { email, password, fullName, name } = req.body;
+  const finalName = fullName || name || '';
   if (!supabase) throw new Error('Supabase not initialized');
+
+  if (!email || !password || !finalName) {
+    return res.status(400).json({ success: false, error: 'Missing required fields' });
+  }
 
   const { data: authData, error: authError } = await supabase.auth.signUp({
     email,
     password,
-    options: { data: { full_name: name, github_username } }
+    options: { data: { full_name: finalName } }
   });
 
   if (authError) {
     return res.status(400).json({ success: false, error: authError.message });
   }
 
-  res.json({ success: true, user: authData.user, session: authData.session });
+  if (authData && authData.user) {
+    const { error: dbError } = await supabase
+      .from('users')
+      .insert([
+        {
+          id: authData.user.id,
+          name: finalName,
+          email: email
+        }
+      ]);
+    
+    if (dbError) {
+      console.error('[AUTH] DB Insert Error:', dbError);
+    }
+  }
+
+  res.json({ success: true, message: 'Signup successful' });
 }));
 
 // ── Login ─────────────────────────────────────────────────────
@@ -115,13 +136,13 @@ app.post('/api/auth/login', asyncHandler(async (req, res) => {
   });
 
   if (signInError) {
-    return res.status(401).json({ success: false, error: signInError.message });
+    return res.status(401).json({ success: false, error: 'Invalid email or password' });
   }
 
   res.json({
     success: true,
     user: signInData.user,
-    session: signInData.session,
+    session: signInData.session
   });
 }));
 
@@ -132,7 +153,7 @@ app.post('/api/auth/logout', asyncHandler(async (req, res) => {
   if (error) {
     return res.status(400).json({ success: false, error: error.message });
   }
-  res.json({ success: true });
+  res.json({ success: true, message: 'Logout successful' });
 }));
 
 // ── Dashboard ─────────────────────────────────────────────────
