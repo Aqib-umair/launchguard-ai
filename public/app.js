@@ -157,6 +157,7 @@ const components = {
     const name = currentUser ? (currentUser.username || currentUser.email) : 'Developer';
     const initial = name.charAt(0).toUpperCase();
     return `<div class="app">
+      <input type="checkbox" id="sidebar-toggle" class="sidebar-toggle" hidden>
       <aside class="sidebar">
         <div class="brand"><div class="mark">L</div><span>launchguard<small>AI RELIABILITY</small></span></div>
         <div class="nav-label">Workspace</div>
@@ -181,6 +182,9 @@ const components = {
       </aside>
       <main class="main">
         <header class="topbar">
+          <label for="sidebar-toggle" class="hamburger">
+            <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+          </label>
           <div class="crumb">WORKSPACE / <b>${title.toUpperCase()}</b></div>
           <div class="top-actions">
             <span><span class="dot"></span>Live</span>
