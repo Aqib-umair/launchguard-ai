@@ -525,7 +525,7 @@ const views = {
       const red1 = document.getElementById('v-red-1');
       const red2 = document.getElementById('v-red-2');
       
-      if (!container || !handle || !afterPane) return;
+      if (!container || !handle || !afterPane || !green1 || !green2 || !red1 || !red2) return;
 
       let isDragging = false;
       
@@ -579,15 +579,19 @@ const views = {
       }, {passive: true});
 
       // Scroll reveal observer
-      const observer = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add('active');
-          }
-        });
-      }, { threshold: 0.1 });
-      
-      document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+      if (window.IntersectionObserver) {
+        const observer = new IntersectionObserver((entries) => {
+          entries.forEach(entry => {
+            if (entry.isIntersecting) {
+              entry.target.classList.add('active');
+            }
+          });
+        }, { threshold: 0.1 });
+        
+        document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+      } else {
+        document.querySelectorAll('.reveal').forEach(el => el.classList.add('active'));
+      }
       
       // Initial trigger (set slider to 50%)
       const initialRect = container.getBoundingClientRect();
